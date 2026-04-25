@@ -337,31 +337,41 @@ export default function CampaignSimulator() {
                     <>Simulating <span className="dot1" style={{ display: "inline-block" }}>●</span><span className="dot2" style={{ display: "inline-block" }}>●</span><span className="dot3" style={{ display: "inline-block" }}>●</span></>
                   ) : "⚡ Simulate Audience Reaction"}
                 </button>
+                {simError && (
+                  <div style={{ marginTop: 14, background: S.redPale, border: `1px solid #FECACA`, borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "#991B1B", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                    <span>⚠️ {simError}</span>
+                    <button onClick={runSimulation} style={{ background: "#fff", border: `1px solid #FECACA`, color: S.red, padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Retry</button>
+                  </div>
+                )}
               </div>
 
-              {showResults && (
+              {showResults && simResult && (
                 <div className="fadeIn">
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 20 }}>
-                    {SEGMENTS.map((seg, i) => (
-                      <div key={seg.id} style={{
-                        background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22,
-                        opacity: showSegments.includes(i) ? 1 : 0,
-                        transform: showSegments.includes(i) ? "translateY(0)" : "translateY(16px)",
-                        transition: "all .4s",
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                          <div style={{ width: 36, height: 36, borderRadius: 10, background: seg.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{seg.icon}</div>
-                          <div style={{ fontSize: 14, fontWeight: 600 }}>{seg.name}</div>
+                    {simResult.segments.map((seg, i) => {
+                      const meta = SEGMENT_META[seg.name] ?? { icon: "👥", iconBg: S.g100 };
+                      const level = pctToLevel(seg.sentimentPct);
+                      return (
+                        <div key={seg.name} style={{
+                          background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22,
+                          opacity: showSegments.includes(i) ? 1 : 0,
+                          transform: showSegments.includes(i) ? "translateY(0)" : "translateY(16px)",
+                          transition: "all .4s",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
+                            <div style={{ width: 36, height: 36, borderRadius: 10, background: meta.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{meta.icon}</div>
+                            <div style={{ fontSize: 14, fontWeight: 600 }}>{seg.name}</div>
+                          </div>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>Sentiment</div>
+                          <div style={{ height: 6, background: S.g100, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
+                            <div style={{ height: "100%", borderRadius: 4, background: fillColor(level), width: `${seg.sentimentPct}%`, transition: "width 1s ease" }} />
+                          </div>
+                          <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 14 }}>{seg.sentimentPct}% positive</div>
+                          <div style={{ background: S.g50, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.g700, marginBottom: 10, lineHeight: 1.5 }}>⚡ <strong>Top Reaction:</strong> {seg.topReaction}</div>
+                          <div style={{ background: S.bluePale, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.blue, fontWeight: 500, lineHeight: 1.5 }}>→ {seg.fix}</div>
                         </div>
-                        <div style={{ fontSize: 11, fontWeight: 500, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>Sentiment</div>
-                        <div style={{ height: 6, background: S.g100, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                          <div style={{ height: "100%", borderRadius: 4, background: fillColor(seg.level), width: `${seg.pct}%`, transition: "width 1s ease" }} />
-                        </div>
-                        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 14 }}>{seg.pct}% positive</div>
-                        <div style={{ background: S.g50, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.g700, marginBottom: 10, lineHeight: 1.5 }}>⚡ <strong>Top Reaction:</strong> {seg.reaction}</div>
-                        <div style={{ background: S.bluePale, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.blue, fontWeight: 500, lineHeight: 1.5 }}>→ {seg.fix}</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {showAnalysis && (
@@ -369,16 +379,11 @@ export default function CampaignSimulator() {
                       <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 16 }}>Emotional Tone Analysis</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                          {[
-                            { label: "Optimistic", color: "#92400E", bg: "#FFFBEB" },
-                            { label: "Defensive", color: "#991B1B", bg: "#FEF2F2" },
-                            { label: "Corporate", color: S.g700, bg: S.g100 },
-                            { label: "Vague", color: "#991B1B", bg: "#FEF2F2" },
-                          ].map((t) => (
-                            <span key={t.label} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, background: t.bg, color: t.color }}>{t.label}</span>
+                          {simResult.tones.map((label) => (
+                            <span key={label} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, background: S.g100, color: S.g700 }}>{label}</span>
                           ))}
                         </div>
-                        <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.6 }}>Your tone skews corporate and defensive. It's likely to trigger skepticism rather than inspire action.</p>
+                        <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.6 }}>AI-detected emotional tone of your copy across the three segments.</p>
                       </div>
                       <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 16 }}>Backlash Risk Meter</div>
@@ -388,8 +393,8 @@ export default function CampaignSimulator() {
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: S.g400, fontWeight: 500 }}>
                           <span>Low</span><span>Medium</span><span>High</span>
                         </div>
-                        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 800, color: S.red, marginTop: 14 }}>⬤ HIGH RISK</div>
-                        <p style={{ fontSize: 13, color: S.g500, marginTop: 10, lineHeight: 1.6 }}>Apply the suggested fixes to drop risk from HIGH → MEDIUM or lower.</p>
+                        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 800, color: simResult.risk === "HIGH" ? S.red : simResult.risk === "MEDIUM" ? S.amber : S.green, marginTop: 14 }}>⬤ {simResult.risk} RISK</div>
+                        <p style={{ fontSize: 13, color: S.g500, marginTop: 10, lineHeight: 1.6 }}>{simResult.riskRationale}</p>
                       </div>
                     </div>
                   )}
