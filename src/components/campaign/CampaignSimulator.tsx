@@ -1,4 +1,6 @@
 import { useState, useEffect, Fragment } from "react";
+import { useServerFn } from "@tanstack/react-start";
+import { simulateCampaign, type SimulationResult } from "@/utils/simulate.functions";
 
 type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" };
 
@@ -16,17 +18,14 @@ type Segment = {
   reaction: string; fix: string;
 };
 
-const SEGMENTS: Segment[] = [
-  { id: 1, icon: "🧑‍💻", iconBg: "#FEF9C3", name: "Gen Z", pct: 42, level: "low",
-    reaction: 'Skeptical about authenticity — "Sounds like every other brand."',
-    fix: "Use transparent sourcing language with real numbers and third-party verification." },
-  { id: 2, icon: "👨‍👩‍👧", iconBg: "#E0F2FE", name: "Parents", pct: 65, level: "mid",
-    reaction: "Price sensitivity — sustainable often reads as expensive.",
-    fix: "Emphasize long-term value and cost-per-use comparisons in the copy." },
-  { id: 3, icon: "🌿", iconBg: "#DCFCE7", name: "Sustainability Advocates", pct: 30, level: "low",
-    reaction: "No proof — vague claims trigger high skepticism in this segment.",
-    fix: "Add data, certifications, and supply-chain breakdown directly in the campaign." },
-];
+const SEGMENT_META: Record<string, { icon: string; iconBg: string }> = {
+  "Gen Z": { icon: "🧑‍💻", iconBg: "#FEF9C3" },
+  "Parents": { icon: "👨‍👩‍👧", iconBg: "#E0F2FE" },
+  "Sustainability Advocates": { icon: "🌿", iconBg: "#DCFCE7" },
+};
+
+const pctToLevel = (pct: number): Segment["level"] =>
+  pct >= 60 ? "high" : pct >= 45 ? "mid" : "low";
 
 function useCountdown(start: number) {
   const [secs, setSecs] = useState(start);
@@ -60,10 +59,13 @@ export default function CampaignSimulator() {
   const [showSegments, setShowSegments] = useState<number[]>([]);
   const [showAnalysis, setShowAnalysis] = useState(false);
   const [showNextBtn, setShowNextBtn] = useState(false);
+  const [simResult, setSimResult] = useState<SimulationResult | null>(null);
+  const [simError, setSimError] = useState<string | null>(null);
   const [campaignText, setCampaignText] = useState(
     '"Our Most Sustainable Product Yet." — We\'re committed to a greener future. Shop our newest collection and join the movement.'
   );
   const countdown = useCountdown(23 * 3600 + 59 * 60);
+  const simulateFn = useServerFn(simulateCampaign);
 
   const goTo = (n: number) => {
     setScreen(n);
@@ -79,21 +81,34 @@ export default function CampaignSimulator() {
     });
   };
 
-  const runSimulation = () => {
+  const runSimulation = async () => {
     setSimulating(true);
     setShowResults(false);
     setShowSegments([]);
     setShowAnalysis(false);
     setShowNextBtn(false);
-    setTimeout(() => {
+    setSimError(null);
+
+    try {
+      const response = await simulateFn({ data: { campaignText } });
+      if (!response.ok) {
+        setSimError(response.error);
+        setSimulating(false);
+        return;
+      }
+      setSimResult(response.data);
       setSimulating(false);
       setShowResults(true);
-      SEGMENTS.forEach((_, i) => {
+      response.data.segments.forEach((_, i) => {
         setTimeout(() => setShowSegments((prev) => [...prev, i]), 100 + i * 160);
       });
       setTimeout(() => setShowAnalysis(true), 600);
       setTimeout(() => setShowNextBtn(true), 1000);
-    }, 2300);
+    } catch (e) {
+      console.error(e);
+      setSimError("Something went wrong. Please try again.");
+      setSimulating(false);
+    }
   };
 
   const navSteps = ["Launch", "Crisis", "Simulate", "Results"];
