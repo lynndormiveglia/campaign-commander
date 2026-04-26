@@ -28,8 +28,30 @@ export type Persona = {
   quote: string;
 };
 
+/* VALS / Pew / Generational anchor catalog used by the persona builder. */
+export const PERSONA_ANCHORS = {
+  vals: [
+    "Innovators","Thinkers","Achievers","Experiencers",
+    "Believers","Strivers","Makers","Survivors",
+  ],
+  pew: [
+    "Progressive Left","Establishment Liberals","Democratic Mainstays","Outsider Left",
+    "Stressed Sideliners","Ambivalent Right","Populist Right","Faith and Flag Conservatives",
+  ],
+  generations: [
+    "Gen Alpha","Gen Z","Millennials","Gen X","Boomers","Silent Generation",
+  ],
+} as const;
+
+export type PersonaAnchor = {
+  vals: typeof PERSONA_ANCHORS.vals[number] | "";
+  pew: typeof PERSONA_ANCHORS.pew[number] | "";
+  generation: typeof PERSONA_ANCHORS.generations[number] | "";
+  notes: string; // freeform descriptor (interests, lifestyle, location)
+};
+
 export type SimulationSegment = {
-  name: "Gen Z" | "Parents" | "Sustainability Advocates";
+  name: string; // VALS-based segment label
   sentimentPct: number;
   topReaction: string;
   fix: string;
@@ -50,13 +72,13 @@ export type SimulationResponse =
   | { ok: true; data: SimulationResult }
   | { ok: false; error: string };
 
-const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign.
+const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign, grounded in the VALS (Values & Lifestyles) framework.
 
 You will be given a structured campaign plan (name, timeline, key message, hashtag, slogan, target audience, and the actual ad copy). Critique it as if you had just shown it to three audience segments and aggregated their reactions. Be specific to the actual words — never generic feedback.
 
 You MUST call the return_simulation tool. Rules:
-- segments: EXACTLY three, in order, with names "Gen Z", "Parents", "Sustainability Advocates". sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
-- personas: 3 invented but realistic individual personas drawn from the target audience. Each has name, archetype (e.g. "Eco-skeptical millennial"), age (range like "28–34"), sentiment 0–100, and quote (~120 chars in their voice).
+- segments: EXACTLY three audience CATEGORIES (NOT individual people) most relevant to the target audience. Each name is a broad consumer category phrased like "Gen Z Fashion Lovers", "Eco-Curious Millennial Parents", "Skeptical Gen X Professionals" — derive these from the VALS framework (Innovators, Thinkers, Achievers, Experiencers, Believers, Strivers, Makers, Survivors) blended with generation. sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
+- personas: 3 broad audience PERSONAS (NOT named individuals) drawn from the target audience using VALS as the primary anchor. The "name" field is a category label like "Gen Z Fashion Lovers" or "Achiever Millennial Parents" — never a person's first name. archetype is the VALS type plus a one-line lifestyle descriptor (e.g. "Achiever · status-driven, success-oriented"). age is a generational range like "Gen Z (18–27)". sentiment 0–100. quote (~120 chars) is the collective voice of that segment.
 - tones: 2–4 short adjectives describing the copy's emotional tone.
 - risk: LOW / MEDIUM / HIGH. riskScore 0–100 (0 safest, 100 most dangerous) — must agree with risk band: LOW 0–33, MEDIUM 34–66, HIGH 67–100.
 - riskRationale: one sentence.
@@ -124,7 +146,7 @@ ${data.plan.copy}`;
                       items: {
                         type: "object",
                         properties: {
-                          name: { type: "string", enum: ["Gen Z", "Parents", "Sustainability Advocates"] },
+                          name: { type: "string" },
                           sentimentPct: { type: "integer", minimum: 0, maximum: 100 },
                           topReaction: { type: "string" },
                           fix: { type: "string" },
@@ -198,10 +220,7 @@ ${data.plan.copy}`;
       try { parsed = JSON.parse(argsStr); }
       catch { return { ok: false, error: "The simulator returned malformed data. Try again." }; }
 
-      const order = ["Gen Z", "Parents", "Sustainability Advocates"] as const;
-      const sortedSegments = order
-        .map((name) => parsed.segments.find((s) => s.name === name))
-        .filter((s): s is SimulationSegment => Boolean(s));
+      const sortedSegments = (parsed.segments ?? []).slice(0, 3);
       if (sortedSegments.length !== 3) return { ok: false, error: "Incomplete segments. Try again." };
 
       return {
@@ -219,6 +238,98 @@ ${data.plan.copy}`;
       };
     } catch (e) {
       console.error("simulateCampaign failed:", e);
+      return { ok: false, error: "Network error. Please try again." };
+    }
+  });
+
+/* ===========================================================
+   Custom persona scoring — uses VALS / Pew / Generation anchors
+   =========================================================== */
+export type PersonaScoreResponse =
+  | { ok: true; persona: Persona }
+  | { ok: false; error: string };
+
+const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a custom audience persona built from three anchors — VALS (Values & Lifestyles), Pew political typology, and generational cohort — plus optional notes and the campaign copy, produce a realistic synthetic reaction.
+
+You MUST call the return_persona tool with:
+- name: a broad category label like "Achiever Millennial Parents" or "Skeptical Gen X Strivers" — NEVER a person's first name.
+- archetype: VALS type + one-line lifestyle descriptor.
+- age: generational range like "Millennials (29–44)".
+- sentiment: integer 0–100 (their predicted positive sentiment toward the campaign copy).
+- quote: ~120 chars in their collective voice reacting to the copy.`;
+
+export const scorePersona = createServerFn({ method: "POST" })
+  .inputValidator((data: { anchor: PersonaAnchor; copy: string }) => {
+    if (!data || !data.anchor) throw new Error("anchor is required");
+    const a = data.anchor;
+    return {
+      anchor: {
+        vals: String(a.vals ?? "").trim().slice(0, 60),
+        pew: String(a.pew ?? "").trim().slice(0, 60),
+        generation: String(a.generation ?? "").trim().slice(0, 60),
+        notes: String(a.notes ?? "").trim().slice(0, 500),
+      },
+      copy: String(data.copy ?? "").trim().slice(0, 2000),
+    };
+  })
+  .handler(async ({ data }): Promise<PersonaScoreResponse> => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    if (!apiKey) return { ok: false, error: "AI is not configured. Please try again later." };
+
+    const userMsg = `Persona anchors:
+- VALS: ${data.anchor.vals || "(unspecified)"}
+- Pew typology: ${data.anchor.pew || "(unspecified)"}
+- Generation: ${data.anchor.generation || "(unspecified)"}
+- Notes: ${data.anchor.notes || "(none)"}
+
+Campaign copy to react to:
+${data.copy || "(no copy provided)"}`;
+
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: PERSONA_SYSTEM },
+            { role: "user", content: userMsg },
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "return_persona",
+              description: "Return the synthetic persona reaction.",
+              parameters: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  archetype: { type: "string" },
+                  age: { type: "string" },
+                  sentiment: { type: "integer", minimum: 0, maximum: 100 },
+                  quote: { type: "string" },
+                },
+                required: ["name","archetype","age","sentiment","quote"],
+                additionalProperties: false,
+              },
+            },
+          }],
+          tool_choice: { type: "function", function: { name: "return_persona" } },
+        }),
+      });
+      if (!res.ok) {
+        if (res.status === 429) return { ok: false, error: "Too many requests — try again in a moment." };
+        if (res.status === 402) return { ok: false, error: "AI credits exhausted." };
+        return { ok: false, error: "Couldn't reach the analyzer. Please try again." };
+      }
+      const json = await res.json();
+      const argsStr = json?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+      if (!argsStr) return { ok: false, error: "Unexpected response. Try again." };
+      const persona = JSON.parse(argsStr) as Persona;
+      persona.sentiment = Math.max(0, Math.min(100, persona.sentiment));
+      return { ok: true, persona };
+    } catch (e) {
+      console.error("scorePersona failed:", e);
       return { ok: false, error: "Network error. Please try again." };
     }
   });
