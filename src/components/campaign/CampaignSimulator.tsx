@@ -1,32 +1,110 @@
-import { useState, useEffect, Fragment } from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
-import { simulateCampaign, type SimulationResult } from "@/utils/simulate.functions";
+import {
+  simulateCampaign,
+  type SimulationResult,
+  type CampaignPlan,
+  type FieldKey,
+  type FieldFlag,
+  type Persona,
+} from "@/utils/simulate.functions";
 
-type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" };
+/* ===========================================================
+   ElevenLabs-inspired monochrome palette
+   =========================================================== */
+const C = {
+  bg: "#FAFAF9",         // off-white canvas
+  surface: "#FFFFFF",
+  ink: "#0A0A0A",        // near-black for type
+  ink2: "#171717",
+  muted: "#737373",
+  faint: "#A3A3A3",
+  line: "#E7E5E4",
+  lineSoft: "#F5F5F4",
+  chipBg: "#F5F5F4",
+  accent: "#0A0A0A",
+  accentInk: "#FFFFFF",
+  good: "#16A34A",
+  goodSoft: "#F0FDF4",
+  warn: "#D97706",
+  warnSoft: "#FFFBEB",
+  bad: "#DC2626",
+  badSoft: "#FEF2F2",
+};
 
-const COMMENTS: Comment[] = [
-  { id: 1, user: "@_realconsumer · 2m ago", text: '"This feels like greenwashing. Zero specifics, just vibes. 🙄"', type: "negative" },
-  { id: 2, user: "@sustainableskeptic · 5m ago", text: '"Who is this even for? The vagueness is insulting."', type: "negative" },
-  { id: 3, user: "@climate_watchdog · 11m ago", text: '"Another brand pretending to care without showing any proof."', type: "negative" },
-  { id: 4, user: "@shoppingmaybe · 18m ago", text: '"What does \'most sustainable\' even mean? Compared to what?"', type: "neutral" },
-  { id: 5, user: "@ethicswatch · 24m ago", text: '"No certifications. No data. Just marketing copy. Pass."', type: "negative" },
+const F = {
+  body: "'Poppins', system-ui, sans-serif",
+  display: "'Space Grotesk', system-ui, sans-serif",
+  mono: "'JetBrains Mono', ui-monospace, monospace",
+};
+
+/* ===========================================================
+   Sample campaign cards (carousel on the launch hero)
+   =========================================================== */
+type SampleCampaign = {
+  id: string;
+  badge: string;
+  title: string;
+  body: string;
+  emoji: string;
+  gradient: string;
+};
+
+const SAMPLE_CAMPAIGNS: SampleCampaign[] = [
+  {
+    id: "sustain",
+    badge: "Sustainability",
+    title: '"Our Most Sustainable Product Yet."',
+    body: "We're committed to a greener future. Shop our newest collection and join the movement.",
+    emoji: "🌱",
+    gradient: "linear-gradient(135deg,#F5F5F4,#E7E5E4)",
+  },
+  {
+    id: "wellness",
+    badge: "Wellness",
+    title: '"Feel Good. Inside and Out."',
+    body: "Clinically-tested, dermatologist-approved formulas. Real results from real people.",
+    emoji: "🧴",
+    gradient: "linear-gradient(135deg,#FAFAF9,#EDE9E3)",
+  },
+  {
+    id: "tech",
+    badge: "Product Launch",
+    title: '"Built for Builders."',
+    body: "Faster than yesterday. Quieter than ever. Designed for the people doing the work.",
+    emoji: "⚙️",
+    gradient: "linear-gradient(135deg,#F0F0EE,#E2DFDA)",
+  },
 ];
 
-type Segment = {
-  id: number; icon: string; iconBg: string; name: string;
-  pct: number; level: "low" | "mid" | "high";
-  reaction: string; fix: string;
+/* ===========================================================
+   Field metadata
+   =========================================================== */
+const FIELD_META: Record<FieldKey, { label: string; placeholder: string; multiline?: boolean; rows?: number }> = {
+  name:           { label: "Campaign Name",   placeholder: "e.g. Greener Fall Drop 2026" },
+  timeline:       { label: "Timeline",        placeholder: "e.g. Mar 18 → Apr 30, 2026" },
+  keyMessage:     { label: "Key Message",     placeholder: "What's the single thing you want them to remember?", multiline: true, rows: 2 },
+  hashtag:        { label: "Hashtag",         placeholder: "#GreenerTogether" },
+  slogan:         { label: "Slogan",          placeholder: "A tighter, punchier line." },
+  targetAudience: { label: "Target Audience", placeholder: "e.g. Eco-curious millennials & Gen Z, US/EU urban", multiline: true, rows: 2 },
+  copy:           { label: "Campaign Copy",   placeholder: "The actual ad copy that audiences will see.", multiline: true, rows: 5 },
 };
 
-const SEGMENT_META: Record<string, { icon: string; iconBg: string }> = {
-  "Gen Z": { icon: "🧑‍💻", iconBg: "#FEF9C3" },
-  "Parents": { icon: "👨‍👩‍👧", iconBg: "#E0F2FE" },
-  "Sustainability Advocates": { icon: "🌿", iconBg: "#DCFCE7" },
+const FIELD_ORDER: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","copy"];
+
+const DEFAULT_PLAN: CampaignPlan = {
+  name: "Greener Fall Drop 2026",
+  timeline: "Mar 18 → Apr 30, 2026",
+  keyMessage: "Our most sustainable product yet — proof inside.",
+  hashtag: "#GreenerTogether",
+  slogan: "Sustainable. Finally.",
+  targetAudience: "Eco-conscious Gen Z & millennial shoppers in US/EU urban areas.",
+  copy: '"Our Most Sustainable Product Yet." — We\'re committed to a greener future. Shop our newest collection and join the movement.',
 };
 
-const pctToLevel = (pct: number): Segment["level"] =>
-  pct >= 60 ? "high" : pct >= 45 ? "mid" : "low";
-
+/* ===========================================================
+   Hooks & helpers
+   =========================================================== */
 function useCountdown(start: number) {
   const [secs, setSecs] = useState(start);
   useEffect(() => {
@@ -39,31 +117,46 @@ function useCountdown(start: number) {
   return [h, m, s].map((n) => String(n).padStart(2, "0"));
 }
 
-const S = {
-  blue: "#2563EB", blueLight: "#3B82F6", bluePale: "#EFF6FF",
-  indigo: "#4F46E5", red: "#EF4444", redPale: "#FEF2F2",
-  green: "#10B981", greenPale: "#ECFDF5", amber: "#F59E0B",
-  g50: "#F8FAFC", g100: "#F1F5F9", g200: "#E2E8F0", g300: "#CBD5E1",
-  g400: "#94A3B8", g500: "#64748B", g700: "#334155", g900: "#0F172A",
+const sevColor = (sev: FieldFlag["severity"]) =>
+  sev === "high" ? C.bad : sev === "medium" ? C.warn : C.muted;
+const sevSoft  = (sev: FieldFlag["severity"]) =>
+  sev === "high" ? C.badSoft : sev === "medium" ? C.warnSoft : C.lineSoft;
+
+type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" };
+const COMMENTS: Comment[] = [
+  { id: 1, user: "@_realconsumer · 2m ago", text: '"This feels like greenwashing. Zero specifics, just vibes. 🙄"', type: "negative" },
+  { id: 2, user: "@sustainableskeptic · 5m ago", text: '"Who is this even for? The vagueness is insulting."', type: "negative" },
+  { id: 3, user: "@climate_watchdog · 11m ago", text: '"Another brand pretending to care without showing any proof."', type: "negative" },
+  { id: 4, user: "@shoppingmaybe · 18m ago", text: '"What does \'most sustainable\' even mean? Compared to what?"', type: "neutral" },
+  { id: 5, user: "@ethicswatch · 24m ago", text: '"No certifications. No data. Just marketing copy. Pass."', type: "negative" },
+];
+
+const SEGMENT_META: Record<string, { icon: string }> = {
+  "Gen Z": { icon: "◐" },
+  "Parents": { icon: "◑" },
+  "Sustainability Advocates": { icon: "◒" },
 };
 
-const fillColor = (level: Segment["level"]) =>
-  level === "low" ? S.red : level === "mid" ? S.amber : S.green;
-
+/* ===========================================================
+   Main component
+   =========================================================== */
 export default function CampaignSimulator() {
   const [screen, setScreen] = useState(1);
   const [chaos, setChaos] = useState(false);
   const [visibleComments, setVisibleComments] = useState<number[]>([]);
+  const [carouselIdx, setCarouselIdx] = useState(0);
+
+  const [plan, setPlan] = useState<CampaignPlan>(DEFAULT_PLAN);
+  const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
+
   const [simulating, setSimulating] = useState(false);
-  const [showResults, setShowResults] = useState(false);
-  const [showSegments, setShowSegments] = useState<number[]>([]);
-  const [showAnalysis, setShowAnalysis] = useState(false);
-  const [showNextBtn, setShowNextBtn] = useState(false);
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   const [simError, setSimError] = useState<string | null>(null);
-  const [campaignText, setCampaignText] = useState(
-    '"Our Most Sustainable Product Yet." — We\'re committed to a greener future. Shop our newest collection and join the movement.'
-  );
+
+  // Results-page interactivity
+  const [appliedFixes, setAppliedFixes] = useState<Set<FieldKey>>(new Set());
+  const [hoverFlag, setHoverFlag] = useState<FieldKey | null>(null);
+
   const countdown = useCountdown(23 * 3600 + 59 * 60);
   const simulateFn = useServerFn(simulateCampaign);
 
@@ -81,418 +174,827 @@ export default function CampaignSimulator() {
     });
   };
 
+  const updateField = (k: FieldKey, v: string) => setPlan((p) => ({ ...p, [k]: v }));
+
   const runSimulation = async () => {
     setSimulating(true);
-    setShowResults(false);
-    setShowSegments([]);
-    setShowAnalysis(false);
-    setShowNextBtn(false);
     setSimError(null);
-
+    setSimResult(null);
+    setAppliedFixes(new Set());
     try {
-      const response = await simulateFn({ data: { campaignText } });
+      const response = await simulateFn({ data: { plan } });
       if (!response.ok) {
         setSimError(response.error);
-        setSimulating(false);
-        return;
+      } else {
+        setSimResult(response.data);
       }
-      setSimResult(response.data);
-      setSimulating(false);
-      setShowResults(true);
-      response.data.segments.forEach((_, i) => {
-        setTimeout(() => setShowSegments((prev) => [...prev, i]), 100 + i * 160);
-      });
-      setTimeout(() => setShowAnalysis(true), 600);
-      setTimeout(() => setShowNextBtn(true), 1000);
     } catch (e) {
       console.error(e);
       setSimError("Something went wrong. Please try again.");
+    } finally {
       setSimulating(false);
     }
   };
 
+  const flagsByField = useMemo(() => {
+    const map = new Map<FieldKey, FieldFlag>();
+    simResult?.flags.forEach((f) => map.set(f.field, f));
+    return map;
+  }, [simResult]);
+
+  const applyFix = (flag: FieldFlag) => {
+    setPlan((p) => ({ ...p, [flag.field]: flag.fix }));
+    setAppliedFixes((prev) => {
+      const next = new Set(prev);
+      next.add(flag.field);
+      return next;
+    });
+  };
+
+  const addCustomPersona = () => {
+    setCustomPersonas((prev) => [
+      ...prev,
+      { name: "Custom persona", archetype: "Describe them…", age: "—", sentiment: 50, quote: "What might they say?" },
+    ]);
+  };
+
+  const updateCustomPersona = (idx: number, patch: Partial<Persona>) => {
+    setCustomPersonas((prev) => prev.map((p, i) => (i === idx ? { ...p, ...patch } : p)));
+  };
+  const removeCustomPersona = (idx: number) => {
+    setCustomPersonas((prev) => prev.filter((_, i) => i !== idx));
+  };
+
   const navSteps = ["Launch", "Crisis", "Simulate", "Results"];
+  const sample = SAMPLE_CAMPAIGNS[carouselIdx];
 
   return (
-    <div style={{ fontFamily: "'DM Sans', system-ui, sans-serif", background: S.g50, minHeight: "100vh", color: S.g900 }}>
+    <div style={{ fontFamily: F.body, background: C.bg, minHeight: "100vh", color: C.ink }}>
       <style>{`
         @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
         @keyframes ciq-fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
-        @keyframes ciq-pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+        @keyframes ciq-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
         @keyframes loadDot { 0%,80%,100%{opacity:.2;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }
         .ciq .dot1{animation:loadDot 1.2s ease-in-out infinite}
         .ciq .dot2{animation:loadDot 1.2s ease-in-out .2s infinite}
         .ciq .dot3{animation:loadDot 1.2s ease-in-out .4s infinite}
         .ciq .fadeIn{animation:ciq-fadeIn .4s ease forwards}
         .ciq .pulseBadge{animation:ciq-pulse 1.4s ease-in-out infinite}
-        .ciq textarea:focus{outline:none; border-color:${S.blue} !important}
-        .ciq button{transition:all .2s}
-        .ciq button:hover:not(:disabled){filter:brightness(1.05)}
+        .ciq input:focus, .ciq textarea:focus{outline:none; border-color:${C.ink} !important; background:#fff}
+        .ciq button{transition:all .15s ease}
+        .ciq button:hover:not(:disabled){transform:translateY(-1px)}
+        .ciq .field-row{transition:background .2s ease, border-color .2s ease}
       `}</style>
 
       <div className="ciq">
-      <nav style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
-        background: "rgba(255,255,255,0.93)", backdropFilter: "blur(12px)",
-        borderBottom: `1px solid ${S.g200}`,
-        padding: "0 28px", height: 56,
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-      }}>
-        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 17, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
-          CampaignIQ
-          <span style={{ background: S.blue, color: "#fff", padding: "2px 8px", borderRadius: 5, fontSize: 12 }}>DEMO</span>
-        </div>
-        <div style={{ display: "flex", gap: 4 }}>
-          {navSteps.map((label, i) => (
-            <button key={label} onClick={() => goTo(i + 1)} style={{
-              padding: "5px 14px", borderRadius: 20, border: "none",
-              fontSize: 12, fontWeight: 500, cursor: "pointer",
-              background: screen === i + 1 ? S.blue : "transparent",
-              color: screen === i + 1 ? "#fff" : S.g400,
-            }}>{label}</button>
-          ))}
-        </div>
-      </nav>
+        {/* ============== TOP NAV ============== */}
+        <nav style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 100,
+          background: "rgba(250,250,249,0.85)", backdropFilter: "blur(14px)",
+          borderBottom: `1px solid ${C.line}`,
+          padding: "0 28px", height: 56,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+        }}>
+          <div style={{ fontFamily: F.display, fontSize: 17, fontWeight: 700, display: "flex", alignItems: "center", gap: 10, letterSpacing: "-0.01em" }}>
+            <span style={{ width: 18, height: 18, background: C.ink, borderRadius: 4, display: "inline-block" }} />
+            CampaignIQ
+            <span style={{ fontFamily: F.mono, background: C.lineSoft, color: C.muted, padding: "2px 7px", borderRadius: 4, fontSize: 10, letterSpacing: ".05em" }}>DEMO</span>
+          </div>
+          <div style={{ display: "flex", gap: 2 }}>
+            {navSteps.map((label, i) => (
+              <button key={label} onClick={() => goTo(i + 1)} style={{
+                padding: "6px 14px", borderRadius: 6, border: "none",
+                fontFamily: F.body, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                background: screen === i + 1 ? C.ink : "transparent",
+                color: screen === i + 1 ? C.accentInk : C.muted,
+              }}>{label}</button>
+            ))}
+          </div>
+        </nav>
 
-      <div style={{ paddingTop: 56 }}>
+        <div style={{ paddingTop: 56 }}>
 
+        {/* =====================================================
+            SCREEN 1 — LAUNCH HERO
+           ===================================================== */}
         {screen === 1 && (
-          <div style={{ background: "#fff", minHeight: "calc(100vh - 56px)" }}>
-            <div style={{ maxWidth: 1060, margin: "0 auto", padding: "48px 28px", display: "grid", gridTemplateColumns: "1fr 400px", gap: 36, alignItems: "start" }}>
-              <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: S.blue, marginBottom: 12 }}>
-                  <span style={{ width: 6, height: 6, background: S.blue, borderRadius: "50%", display: "inline-block", animation: "blink 1.4s ease-in-out infinite" }} />
-                  Campaign Preview
-                </div>
-                <h1 style={{ fontFamily: "Syne, sans-serif", fontSize: 40, fontWeight: 800, lineHeight: 1.1, marginBottom: 10 }}>Ready to go live?</h1>
-                <p style={{ fontSize: 15, color: S.g500, lineHeight: 1.6, marginBottom: 32 }}>Your campaign has been approved. Review the final creative before launching to 2.4M subscribers.</p>
-
-                <div style={{ border: `1.5px solid ${S.g200}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
-                  <div style={{ height: 240, background: "linear-gradient(135deg,#E0F2FE,#DBEAFE,#E0E7FF)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(45deg,rgba(37,99,235,.04) 0px,rgba(37,99,235,.04) 1px,transparent 1px,transparent 24px)" }} />
-                    <div style={{ textAlign: "center", zIndex: 1 }}>
-                      <div style={{ width: 60, height: 60, background: "rgba(255,255,255,.7)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 26, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.8)" }}>🌱</div>
-                      <div style={{ fontSize: 12, fontWeight: 500, color: S.g500 }}>Product Image Placeholder</div>
-                    </div>
-                  </div>
-                  <div style={{ padding: 24 }}>
-                    <span style={{ display: "inline-block", fontSize: 10, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: S.green, background: S.greenPale, borderRadius: 4, padding: "3px 8px", marginBottom: 12 }}>Sustainability Campaign</span>
-                    <div style={{ fontFamily: "Syne, sans-serif", fontSize: 21, fontWeight: 700, lineHeight: 1.3, marginBottom: 8 }}>"Our Most Sustainable Product Yet."</div>
-                    <div style={{ fontSize: 14, color: S.g500, marginBottom: 20, lineHeight: 1.6 }}>We're committed to a greener future. Shop our newest collection and join the movement.</div>
-                    <div style={{ display: "flex", gap: 10 }}>
-                      <button style={{ background: S.g900, color: "#fff", border: "none", padding: "11px 26px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Buy Now</button>
-                      <button style={{ background: S.g100, border: "none", padding: "11px 14px", borderRadius: 8, fontSize: 14, cursor: "pointer", color: S.g500 }}>↗ Share</button>
-                    </div>
-                  </div>
-                </div>
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            {/* Hero */}
+            <div style={{ maxWidth: 1100, margin: "0 auto", padding: "80px 28px 48px", textAlign: "center" }}>
+              <div style={{
+                display: "inline-flex", alignItems: "center", gap: 8,
+                fontFamily: F.mono, fontSize: 11, fontWeight: 500, color: C.muted,
+                background: C.surface, border: `1px solid ${C.line}`, borderRadius: 999,
+                padding: "5px 12px", marginBottom: 28, letterSpacing: ".04em",
+              }}>
+                <span style={{ width: 6, height: 6, background: C.bad, borderRadius: "50%", display: "inline-block", animation: "blink 1.4s ease-in-out infinite" }} />
+                LAUNCH WINDOW OPEN
               </div>
+              <h1 style={{
+                fontFamily: F.display, fontSize: "clamp(40px, 6vw, 68px)",
+                fontWeight: 700, lineHeight: 1.04, letterSpacing: "-0.03em",
+                marginBottom: 18,
+              }}>
+                Ship your campaign.<br />
+                <span style={{ color: C.muted }}>Or stress-test it first.</span>
+              </h1>
+              <p style={{ fontSize: 17, color: C.muted, lineHeight: 1.6, maxWidth: 560, margin: "0 auto 40px" }}>
+                Your campaign is queued for 2.4M subscribers. One button sends it live — the other shows you what happens if you don't.
+              </p>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-                <div style={{ background: S.g900, borderRadius: 16, padding: 28, color: "#fff", textAlign: "center" }}>
-                  <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.45)", marginBottom: 20 }}>Scheduled Launch</div>
-                  <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-start", gap: 10, marginBottom: 24 }}>
+              {/* Hero CTA cluster */}
+              <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 14 }}>
+                <button onClick={launchCampaign} style={{
+                  background: C.ink, color: C.accentInk, border: "none",
+                  padding: "18px 44px", borderRadius: 10,
+                  fontFamily: F.body, fontSize: 16, fontWeight: 600, cursor: "pointer",
+                  display: "inline-flex", alignItems: "center", gap: 12,
+                  boxShadow: "0 8px 32px rgba(0,0,0,.18)",
+                }}>
+                  Launch Campaign Now
+                  <span style={{ fontFamily: F.mono, fontSize: 13, opacity: .7 }}>→</span>
+                </button>
+                <button onClick={() => goTo(3)} style={{
+                  background: "transparent", color: C.ink, border: "none",
+                  padding: "8px 16px", fontFamily: F.body, fontSize: 14, fontWeight: 500,
+                  cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 4, textDecorationColor: C.faint,
+                }}>
+                  or simulate first →
+                </button>
+
+                {/* Countdown */}
+                <div style={{
+                  marginTop: 22, display: "inline-flex", alignItems: "center", gap: 14,
+                  fontFamily: F.mono, fontSize: 13, color: C.muted,
+                }}>
+                  <span style={{ textTransform: "uppercase", letterSpacing: ".1em" }}>Auto-launch</span>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                     {countdown.map((val, i) => (
                       <Fragment key={i}>
-                        {i > 0 && <div style={{ fontFamily: "Syne, sans-serif", fontSize: 36, fontWeight: 800, color: "rgba(255,255,255,.25)", marginTop: 6 }}>:</div>}
-                        <div style={{ textAlign: "center" }}>
-                          <div style={{ fontFamily: "Syne, sans-serif", fontSize: 40, fontWeight: 800, background: "rgba(255,255,255,.08)", borderRadius: 10, padding: "7px 11px", minWidth: 60, lineHeight: 1 }}>{val}</div>
-                          <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 5, textTransform: "uppercase", letterSpacing: ".06em" }}>{["hours","min","sec"][i]}</div>
-                        </div>
+                        {i > 0 && <span style={{ color: C.faint }}>:</span>}
+                        <span style={{
+                          background: C.surface, border: `1px solid ${C.line}`, borderRadius: 4,
+                          padding: "4px 8px", color: C.ink, fontWeight: 600, minWidth: 32, textAlign: "center",
+                        }}>{val}</span>
                       </Fragment>
                     ))}
                   </div>
-                  <button onClick={launchCampaign} style={{
-                    width: "100%", background: S.blue, color: "#fff", border: "none",
-                    padding: 16, borderRadius: 12, fontFamily: "Syne, sans-serif",
-                    fontSize: 17, fontWeight: 700, cursor: "pointer",
-                    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-                  }}>Launch Campaign →</button>
                 </div>
-                <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "14px 16px", display: "flex", gap: 10 }}>
-                  <span style={{ fontSize: 18 }}>⚠️</span>
-                  <div style={{ fontSize: 13, color: "#92400E", lineHeight: 1.5 }}><strong>No pre-testing detected.</strong> This campaign has not been simulated against audience segments. Launch at your own risk.</div>
-                </div>
+              </div>
+
+              {/* Risk banner */}
+              <div style={{
+                maxWidth: 560, margin: "32px auto 0",
+                background: C.warnSoft, border: `1px solid #FCD34D`,
+                borderRadius: 8, padding: "12px 16px",
+                display: "flex", gap: 10, alignItems: "center", textAlign: "left",
+                fontFamily: F.mono, fontSize: 12, color: "#92400E",
+              }}>
+                <span>⚠</span>
+                <span><strong>NO PRE-TESTING DETECTED</strong> — launching blind to 2.4M subscribers.</span>
               </div>
             </div>
 
+            {/* Sample-campaigns carousel */}
+            <div style={{ maxWidth: 1100, margin: "0 auto", padding: "40px 28px 80px" }}>
+              <div style={{
+                display: "flex", justifyContent: "space-between", alignItems: "baseline",
+                marginBottom: 18, gap: 16,
+              }}>
+                <div>
+                  <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
+                    Queued · {SAMPLE_CAMPAIGNS.length} campaigns
+                  </div>
+                  <h3 style={{ fontFamily: F.display, fontSize: 22, fontWeight: 600, letterSpacing: "-0.02em" }}>
+                    Sample creative in your queue
+                  </h3>
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => setCarouselIdx((i) => (i - 1 + SAMPLE_CAMPAIGNS.length) % SAMPLE_CAMPAIGNS.length)}
+                    style={carouselBtnStyle()}>←</button>
+                  <button onClick={() => setCarouselIdx((i) => (i + 1) % SAMPLE_CAMPAIGNS.length)}
+                    style={carouselBtnStyle()}>→</button>
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16 }}>
+                {SAMPLE_CAMPAIGNS.map((c, i) => {
+                  const active = i === carouselIdx;
+                  return (
+                    <button key={c.id} onClick={() => setCarouselIdx(i)} style={{
+                      textAlign: "left", cursor: "pointer", padding: 0,
+                      background: C.surface,
+                      border: `1px solid ${active ? C.ink : C.line}`,
+                      borderRadius: 12, overflow: "hidden",
+                      transform: active ? "translateY(-2px)" : "none",
+                      boxShadow: active ? "0 12px 32px rgba(0,0,0,.08)" : "none",
+                    }}>
+                      <div style={{ height: 120, background: c.gradient, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>
+                        {c.emoji}
+                      </div>
+                      <div style={{ padding: 16 }}>
+                        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8 }}>{c.badge}</div>
+                        <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, marginBottom: 6, letterSpacing: "-0.01em", lineHeight: 1.3 }}>{c.title}</div>
+                        <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>{c.body}</div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Selected campaign detail */}
+              <div style={{
+                marginTop: 24, background: C.surface, border: `1px solid ${C.line}`,
+                borderRadius: 12, padding: 28,
+                display: "grid", gridTemplateColumns: "1fr 280px", gap: 28, alignItems: "center",
+              }}>
+                <div>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    Now previewing — {sample.badge}
+                  </div>
+                  <div style={{ fontFamily: F.display, fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em", marginBottom: 8 }}>{sample.title}</div>
+                  <div style={{ fontSize: 14, color: C.muted, lineHeight: 1.6 }}>{sample.body}</div>
+                </div>
+                <div style={{
+                  height: 140, borderRadius: 10, background: sample.gradient,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: 48, border: `1px solid ${C.line}`,
+                }}>{sample.emoji}</div>
+              </div>
+            </div>
+
+            {/* Crisis overlay */}
             {chaos && (
-              <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,.96)", overflowY: "auto", animation: "ciq-fadeIn .3s ease" }}>
+              <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(10,10,10,.97)", overflowY: "auto", animation: "ciq-fadeIn .3s ease" }}>
                 <div style={{ maxWidth: 720, margin: "0 auto", padding: "52px 24px" }}>
                   <div style={{ textAlign: "center", marginBottom: 36 }}>
-                    <div style={{ fontFamily: "Syne, sans-serif", fontSize: 32, fontWeight: 800, color: "#fff", marginBottom: 8 }}>🔴 Campaign is Live</div>
-                    <div style={{ fontSize: 14, color: "rgba(255,255,255,.45)" }}>Real-time reaction feed — first 4 hours</div>
+                    <div style={{ fontFamily: F.mono, fontSize: 11, color: "rgba(255,255,255,.45)", letterSpacing: ".15em", marginBottom: 12 }}>● LIVE FEED</div>
+                    <div style={{ fontFamily: F.display, fontSize: 32, fontWeight: 700, color: "#fff", letterSpacing: "-0.02em" }}>Campaign is live.</div>
+                    <div style={{ fontSize: 14, color: "rgba(255,255,255,.5)", marginTop: 6 }}>Real-time reaction feed — first 4 hours</div>
                   </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 18 }}>
                     {[
-                      { label: "Engagement Rate", val: "1.2%", color: "#FCA5A5" },
-                      { label: "Sentiment Score", val: "38% positive", color: "#FCD34D" },
+                      { label: "Engagement Rate", val: "1.2%" },
+                      { label: "Sentiment Score", val: "38% positive" },
                     ].map((s) => (
-                      <div key={s.label} style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, padding: 20 }}>
-                        <div style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>{s.label}</div>
-                        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 28, fontWeight: 800, color: s.color }}>{s.val}</div>
+                      <div key={s.label} style={{ background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, padding: 18 }}>
+                        <div style={{ fontFamily: F.mono, fontSize: 10, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>{s.label}</div>
+                        <div style={{ fontFamily: F.display, fontSize: 26, fontWeight: 700, color: "#fff" }}>{s.val}</div>
                       </div>
                     ))}
-                    <div style={{ gridColumn: "span 2", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, padding: 20 }}>
-                      <div style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Backlash Risk</div>
+                    <div style={{ gridColumn: "span 2", background: "rgba(220,38,38,.1)", border: "1px solid rgba(220,38,38,.3)", borderRadius: 10, padding: 18 }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 10, color: "rgba(255,255,255,.45)", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 10 }}>Backlash Risk</div>
                       <span className="pulseBadge" style={{
-                        display: "inline-flex", alignItems: "center", gap: 6,
-                        background: "rgba(239,68,68,.2)", border: "1px solid rgba(239,68,68,.4)",
-                        color: "#FCA5A5", fontSize: 13, fontWeight: 600,
-                        padding: "6px 14px", borderRadius: 6,
-                      }}>● HIGH — Escalating</span>
+                        display: "inline-flex", alignItems: "center", gap: 8,
+                        fontFamily: F.mono, color: "#FCA5A5", fontSize: 13, fontWeight: 600, letterSpacing: ".05em",
+                      }}>● HIGH — ESCALATING</span>
                     </div>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 28 }}>
                     {COMMENTS.map((c) => (
                       <div key={c.id} style={{
-                        background: "rgba(255,255,255,.05)",
-                        borderLeft: `3px solid ${c.type === "neutral" ? S.amber : S.red}`,
-                        borderRadius: "0 10px 10px 0", padding: "14px 16px",
+                        background: "rgba(255,255,255,.04)",
+                        borderLeft: `2px solid ${c.type === "neutral" ? C.warn : C.bad}`,
+                        borderRadius: "0 8px 8px 0", padding: "12px 14px",
                         transition: "all .4s",
                         opacity: visibleComments.includes(c.id) ? 1 : 0,
-                        transform: visibleComments.includes(c.id) ? "translateX(0)" : "translateX(-20px)",
+                        transform: visibleComments.includes(c.id) ? "translateX(0)" : "translateX(-16px)",
                       }}>
-                        <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.4)", marginBottom: 5, textTransform: "uppercase", letterSpacing: ".06em" }}>{c.user}</div>
+                        <div style={{ fontFamily: F.mono, fontSize: 10, color: "rgba(255,255,255,.45)", marginBottom: 4, letterSpacing: ".05em" }}>{c.user}</div>
                         <div style={{ fontSize: 14, color: "rgba(255,255,255,.85)", lineHeight: 1.5 }}>{c.text}</div>
                       </div>
                     ))}
                   </div>
                   <button onClick={() => goTo(2)} style={{
-                    width: "100%", background: "#fff", color: S.g900,
-                    border: "none", padding: 16, borderRadius: 12,
-                    fontFamily: "Syne, sans-serif", fontSize: 16, fontWeight: 700, cursor: "pointer",
-                  }}>See the Cost of This Mistake →</button>
+                    width: "100%", background: "#fff", color: C.ink, border: "none",
+                    padding: 16, borderRadius: 10, fontFamily: F.body, fontSize: 15, fontWeight: 600, cursor: "pointer",
+                  }}>See the cost of this mistake →</button>
                 </div>
               </div>
             )}
           </div>
         )}
 
+        {/* =====================================================
+            SCREEN 2 — CRISIS
+           ===================================================== */}
         {screen === 2 && (
-          <div style={{ background: "#fff", minHeight: "calc(100vh - 56px)" }}>
-            <div style={{ maxWidth: 820, margin: "0 auto", padding: "64px 28px", textAlign: "center" }} className="fadeIn">
-              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: S.red, marginBottom: 20 }}>📰 Media Coverage — 72 Hours Later</div>
-              <div style={{ background: S.redPale, border: "1px solid #FECACA", borderRadius: 12, padding: "28px 32px", marginBottom: 48, position: "relative", overflow: "hidden" }}>
-                <div style={{ position: "absolute", top: -14, left: 14, fontSize: 90, color: "#FECACA", fontFamily: "Georgia, serif", lineHeight: 1, userSelect: "none" }}>"</div>
-                <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 700, color: S.red, position: "relative", zIndex: 1 }}>Brand Faces Backlash After Tone-Deaf Sustainability Campaign</div>
-                <div style={{ fontSize: 12, color: S.g400, marginTop: 8 }}>— TechCrunch, The Guardian, AdAge & 47 others</div>
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            <div style={{ maxWidth: 820, margin: "0 auto", padding: "80px 28px", textAlign: "center" }} className="fadeIn">
+              <div style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 500, letterSpacing: ".15em", color: C.bad, marginBottom: 24 }}>● MEDIA COVERAGE — 72 HOURS LATER</div>
+              <div style={{ background: C.badSoft, border: `1px solid #FECACA`, borderRadius: 12, padding: "28px 32px", marginBottom: 48 }}>
+                <div style={{ fontFamily: F.display, fontSize: 24, fontWeight: 600, color: C.bad, letterSpacing: "-0.02em", lineHeight: 1.3 }}>Brand Faces Backlash After Tone-Deaf Sustainability Campaign</div>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, marginTop: 10, letterSpacing: ".05em" }}>— TechCrunch · The Guardian · AdAge & 47 others</div>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 52 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 52 }}>
                 {[
-                  { icon: "💸", label: "Estimated PR Crisis Cost", val: "$2.3M", desc: "Agency response, retraction spend & ad pull" },
-                  { icon: "📉", label: "Brand Trust Drop", val: "−18%", desc: "Consumer trust score (YouGov, post-campaign)" },
+                  { label: "PR Crisis Cost", val: "$2.3M", desc: "Agency response, retraction & ad pull" },
+                  { label: "Brand Trust Drop", val: "−18%", desc: "Consumer trust score (YouGov)" },
                 ].map((c) => (
-                  <div key={c.label} style={{ border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: "28px 22px", textAlign: "left", position: "relative", overflow: "hidden" }}>
-                    <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: S.red }} />
-                    <div style={{ fontSize: 28, marginBottom: 16 }}>{c.icon}</div>
-                    <div style={{ fontSize: 12, fontWeight: 500, color: S.g400, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>{c.label}</div>
-                    <div style={{ fontFamily: "Syne, sans-serif", fontSize: 40, fontWeight: 800, color: S.red, lineHeight: 1 }}>{c.val}</div>
-                    <div style={{ fontSize: 13, color: S.g400, marginTop: 8 }}>{c.desc}</div>
+                  <div key={c.label} style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 24, textAlign: "left" }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 10 }}>{c.label}</div>
+                    <div style={{ fontFamily: F.display, fontSize: 40, fontWeight: 700, color: C.bad, lineHeight: 1, letterSpacing: "-0.02em" }}>{c.val}</div>
+                    <div style={{ fontSize: 13, color: C.muted, marginTop: 10 }}>{c.desc}</div>
                   </div>
                 ))}
               </div>
               <button onClick={() => goTo(3)} style={{
-                background: S.g900, color: "#fff", border: "none",
-                padding: "17px 36px", borderRadius: 12,
-                fontFamily: "Syne, sans-serif", fontSize: 16, fontWeight: 700, cursor: "pointer",
-                display: "inline-flex", alignItems: "center", gap: 10,
-              }}>✦ What if we tested this first?</button>
+                background: C.ink, color: C.accentInk, border: "none",
+                padding: "16px 32px", borderRadius: 10,
+                fontFamily: F.body, fontSize: 15, fontWeight: 600, cursor: "pointer",
+              }}>What if we tested this first? →</button>
             </div>
           </div>
         )}
 
+        {/* =====================================================
+            SCREEN 3 — SIMULATE (DETAILED FORM)
+           ===================================================== */}
         {screen === 3 && (
-          <div style={{ background: S.g50, minHeight: "calc(100vh - 56px)" }}>
-            <div style={{ maxWidth: 1020, margin: "0 auto", padding: "48px 28px" }} className="fadeIn">
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            <div style={{ maxWidth: 1080, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
               <div style={{ marginBottom: 36 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: S.blue, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ width: 6, height: 6, background: S.blue, borderRadius: "50%", display: "inline-block", animation: "blink 1.4s ease-in-out infinite" }} />
-                  AI Pre-Testing Engine
-                </div>
-                <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 34, fontWeight: 800, marginBottom: 8 }}>Simulate Before You Launch</h2>
-                <p style={{ fontSize: 15, color: S.g500 }}>Paste your campaign copy below. Our engine stress-tests it across real audience segments in seconds.</p>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● PRE-LAUNCH SIMULATOR</div>
+                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, marginBottom: 10, letterSpacing: "-0.02em" }}>Campaign Plan</h2>
+                <p style={{ fontSize: 15, color: C.muted, maxWidth: 560 }}>
+                  Fill in the details. The AI pre-check evaluates your <strong style={{ color: C.ink }}>copy</strong> in real time. Predicted personas update once you run a focus group.
+                </p>
               </div>
 
-              <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: 28, marginBottom: 24, boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
-                <div style={{ fontSize: 12, fontWeight: 600, color: S.g700, marginBottom: 10, textTransform: "uppercase", letterSpacing: ".07em" }}>Campaign Copy</div>
-                <textarea
-                  value={campaignText}
-                  onChange={(e) => setCampaignText(e.target.value)}
-                  rows={4}
-                  style={{
-                    width: "100%", border: `1.5px solid ${S.g200}`, borderRadius: 10,
-                    padding: "13px 15px", fontFamily: "DM Sans, sans-serif",
-                    fontSize: 15, color: S.g900, lineHeight: 1.6, resize: "none",
-                    background: S.g50,
-                  }}
-                />
-                <button onClick={runSimulation} disabled={simulating} style={{
-                  marginTop: 14, background: simulating ? S.g400 : S.blue, color: "#fff",
-                  border: "none", padding: "13px 26px", borderRadius: 10,
-                  fontFamily: "DM Sans, sans-serif", fontSize: 15, fontWeight: 600,
-                  cursor: simulating ? "default" : "pointer",
-                  display: "flex", alignItems: "center", gap: 8,
-                }}>
-                  {simulating ? (
-                    <>Simulating <span className="dot1" style={{ display: "inline-block" }}>●</span><span className="dot2" style={{ display: "inline-block" }}>●</span><span className="dot3" style={{ display: "inline-block" }}>●</span></>
-                  ) : "⚡ Simulate Audience Reaction"}
-                </button>
-                {simError && (
-                  <div style={{ marginTop: 14, background: S.redPale, border: `1px solid #FECACA`, borderRadius: 10, padding: "12px 14px", fontSize: 13, color: "#991B1B", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
-                    <span>⚠️ {simError}</span>
-                    <button onClick={runSimulation} style={{ background: "#fff", border: `1px solid #FECACA`, color: S.red, padding: "6px 12px", borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Retry</button>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 360px", gap: 24, alignItems: "start" }}>
+                {/* LEFT — Form */}
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 20 }}>
+                    Detailed Campaign Plan
                   </div>
-                )}
-              </div>
 
-              {showResults && simResult && (
-                <div className="fadeIn">
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 20 }}>
-                    {simResult.segments.map((seg, i) => {
-                      const meta = SEGMENT_META[seg.name] ?? { icon: "👥", iconBg: S.g100 };
-                      const level = pctToLevel(seg.sentimentPct);
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                    {FIELD_ORDER.map((k) => {
+                      const meta = FIELD_META[k];
+                      const isCopy = k === "copy";
+                      const fullWidth = isCopy || k === "keyMessage" || k === "targetAudience";
                       return (
-                        <div key={seg.name} style={{
-                          background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22,
-                          opacity: showSegments.includes(i) ? 1 : 0,
-                          transform: showSegments.includes(i) ? "translateY(0)" : "translateY(16px)",
-                          transition: "all .4s",
-                        }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}>
-                            <div style={{ width: 36, height: 36, borderRadius: 10, background: meta.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{meta.icon}</div>
-                            <div style={{ fontSize: 14, fontWeight: 600 }}>{seg.name}</div>
-                          </div>
-                          <div style={{ fontSize: 11, fontWeight: 500, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>Sentiment</div>
-                          <div style={{ height: 6, background: S.g100, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}>
-                            <div style={{ height: "100%", borderRadius: 4, background: fillColor(level), width: `${seg.sentimentPct}%`, transition: "width 1s ease" }} />
-                          </div>
-                          <div style={{ fontFamily: "Syne, sans-serif", fontSize: 22, fontWeight: 800, marginBottom: 14 }}>{seg.sentimentPct}% positive</div>
-                          <div style={{ background: S.g50, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.g700, marginBottom: 10, lineHeight: 1.5 }}>⚡ <strong>Top Reaction:</strong> {seg.topReaction}</div>
-                          <div style={{ background: S.bluePale, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.blue, fontWeight: 500, lineHeight: 1.5 }}>→ {seg.fix}</div>
+                        <div key={k} style={{ gridColumn: fullWidth ? "1 / -1" : undefined }}>
+                          <label style={{
+                            display: "flex", justifyContent: "space-between", alignItems: "center",
+                            fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".1em",
+                            textTransform: "uppercase", marginBottom: 6,
+                          }}>
+                            <span>{meta.label}</span>
+                            {isCopy && (
+                              <span style={{
+                                fontFamily: F.mono, fontSize: 9, color: C.ink,
+                                background: C.lineSoft, padding: "2px 6px", borderRadius: 4, letterSpacing: ".08em",
+                              }}>AI PRE-CHECK ON</span>
+                            )}
+                          </label>
+                          {meta.multiline ? (
+                            <textarea
+                              value={plan[k]}
+                              onChange={(e) => updateField(k, e.target.value)}
+                              placeholder={meta.placeholder}
+                              rows={meta.rows ?? 3}
+                              style={inputStyle(isCopy)}
+                            />
+                          ) : (
+                            <input
+                              value={plan[k]}
+                              onChange={(e) => updateField(k, e.target.value)}
+                              placeholder={meta.placeholder}
+                              style={inputStyle(false)}
+                            />
+                          )}
                         </div>
                       );
                     })}
                   </div>
 
-                  {showAnalysis && (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }} className="fadeIn">
-                      <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 16 }}>Emotional Tone Analysis</div>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
-                          {simResult.tones.map((label) => (
-                            <span key={label} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, background: S.g100, color: S.g700 }}>{label}</span>
-                          ))}
-                        </div>
-                        <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.6 }}>AI-detected emotional tone of your copy across the three segments.</p>
-                      </div>
-                      <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22 }}>
-                        <div style={{ fontSize: 12, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 16 }}>Backlash Risk Meter</div>
-                        <div style={{ height: 10, background: S.g100, borderRadius: 6, overflow: "hidden", marginBottom: 10 }}>
-                          <div style={{ height: "100%", background: `linear-gradient(90deg,${S.green},${S.amber},${S.red})`, width: "100%", borderRadius: 6 }} />
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: S.g400, fontWeight: 500 }}>
-                          <span>Low</span><span>Medium</span><span>High</span>
-                        </div>
-                        <div style={{ fontFamily: "Syne, sans-serif", fontSize: 20, fontWeight: 800, color: simResult.risk === "HIGH" ? S.red : simResult.risk === "MEDIUM" ? S.amber : S.green, marginTop: 14 }}>⬤ {simResult.risk} RISK</div>
-                        <p style={{ fontSize: 13, color: S.g500, marginTop: 10, lineHeight: 1.6 }}>{simResult.riskRationale}</p>
-                      </div>
+                  <div style={{ display: "flex", gap: 10, alignItems: "center", marginTop: 22 }}>
+                    <button onClick={runSimulation} disabled={simulating} style={{
+                      background: simulating ? C.faint : C.ink, color: C.accentInk,
+                      border: "none", padding: "13px 24px", borderRadius: 8,
+                      fontFamily: F.body, fontSize: 14, fontWeight: 600,
+                      cursor: simulating ? "default" : "pointer",
+                      display: "inline-flex", alignItems: "center", gap: 8,
+                    }}>
+                      {simulating ? (
+                        <>Running focus group <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+                      ) : "Run Focus Group"}
+                    </button>
+                    {simResult && (
+                      <button onClick={() => goTo(4)} style={{
+                        background: "transparent", color: C.ink, border: `1px solid ${C.ink}`,
+                        padding: "12px 22px", borderRadius: 8,
+                        fontFamily: F.body, fontSize: 14, fontWeight: 600, cursor: "pointer",
+                      }}>See how you can improve →</button>
+                    )}
+                  </div>
+
+                  {simError && (
+                    <div style={{
+                      marginTop: 14, background: C.badSoft, border: `1px solid #FECACA`,
+                      borderRadius: 8, padding: "12px 14px", fontFamily: F.mono,
+                      fontSize: 12, color: "#991B1B",
+                      display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12,
+                    }}>
+                      <span>⚠ {simError}</span>
+                      <button onClick={runSimulation} style={{ background: "#fff", border: `1px solid #FECACA`, color: C.bad, padding: "5px 10px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer" }}>Retry</button>
                     </div>
                   )}
-
-                  {showNextBtn && (
-                    <button onClick={() => goTo(4)} className="fadeIn" style={{
-                      background: S.blue, color: "#fff", border: "none",
-                      padding: "15px 30px", borderRadius: 12,
-                      fontFamily: "Syne, sans-serif", fontSize: 16, fontWeight: 700, cursor: "pointer",
-                      display: "inline-flex", alignItems: "center", gap: 8,
-                    }}>See the Improved Campaign ✦</button>
-                  )}
                 </div>
+
+                {/* RIGHT — Personas */}
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 24 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                      AI-Predicted Personas
+                    </div>
+                  </div>
+                  <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 16 }}>
+                    {simResult ? "Generated from your target audience." : "Run a focus group to generate personas, or add your own below."}
+                  </p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    {(simResult?.personas ?? []).map((p, i) => (
+                      <PersonaCard key={`ai-${i}`} persona={p} editable={false} />
+                    ))}
+                    {customPersonas.map((p, i) => (
+                      <PersonaCard
+                        key={`custom-${i}`}
+                        persona={p}
+                        editable
+                        onChange={(patch) => updateCustomPersona(i, patch)}
+                        onRemove={() => removeCustomPersona(i)}
+                      />
+                    ))}
+                    {!simResult && customPersonas.length === 0 && (
+                      <div style={{
+                        border: `1px dashed ${C.line}`, borderRadius: 10, padding: 18,
+                        textAlign: "center", color: C.faint, fontSize: 12,
+                      }}>
+                        No personas yet.
+                      </div>
+                    )}
+                  </div>
+
+                  <button onClick={addCustomPersona} style={{
+                    width: "100%", marginTop: 14,
+                    background: "transparent", color: C.ink,
+                    border: `1px dashed ${C.line}`, borderRadius: 8,
+                    padding: "10px 14px", fontFamily: F.body, fontSize: 13, fontWeight: 500, cursor: "pointer",
+                  }}>+ Add custom persona</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            SCREEN 4 — RESULTS
+           ===================================================== */}
+        {screen === 4 && (
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            <div style={{ maxWidth: 1080, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+              <div style={{ marginBottom: 30 }}>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● FOCUS-GROUP RESULTS</div>
+                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
+                  Here's how you can improve.
+                </h2>
+                <p style={{ fontSize: 15, color: C.muted, maxWidth: 620 }}>
+                  Risky fields are flagged below. Hover for the AI's suggestion, or one-click to apply the fix.
+                </p>
+              </div>
+
+              {!simResult ? (
+                <div style={{
+                  background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14,
+                  padding: 40, textAlign: "center",
+                }}>
+                  <p style={{ color: C.muted, marginBottom: 16 }}>No simulation yet — run a focus group to see results.</p>
+                  <button onClick={() => goTo(3)} style={primaryBtnStyle()}>Go to simulator</button>
+                </div>
+              ) : (
+                <>
+                  {/* Risk meter (scale with marker) */}
+                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 24, marginBottom: 18 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                        Backlash Risk Meter
+                      </div>
+                      <div style={{
+                        fontFamily: F.display, fontSize: 18, fontWeight: 700,
+                        color: simResult.risk === "HIGH" ? C.bad : simResult.risk === "MEDIUM" ? C.warn : C.good,
+                        letterSpacing: "-0.01em",
+                      }}>{simResult.risk} · {simResult.riskScore}/100</div>
+                    </div>
+                    <RiskMeter score={simResult.riskScore} />
+                    <p style={{ fontSize: 13, color: C.muted, marginTop: 14, lineHeight: 1.6 }}>{simResult.riskRationale}</p>
+                  </div>
+
+                  {/* Form with flagged fields */}
+                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28, marginBottom: 28 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                        Flagged fields · {simResult.flags.length}
+                      </div>
+                      <button onClick={runSimulation} disabled={simulating} style={{
+                        background: C.ink, color: C.accentInk, border: "none",
+                        padding: "10px 18px", borderRadius: 8,
+                        fontFamily: F.body, fontSize: 13, fontWeight: 600,
+                        cursor: simulating ? "default" : "pointer",
+                      }}>{simulating ? "Re-running…" : "Run Focus Group"}</button>
+                    </div>
+
+                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                      {FIELD_ORDER.map((k) => {
+                        const flag = flagsByField.get(k);
+                        const applied = appliedFixes.has(k);
+                        const meta = FIELD_META[k];
+                        const sev = flag?.severity ?? "low";
+                        const isHover = hoverFlag === k;
+                        return (
+                          <div key={k} className="field-row"
+                            onMouseEnter={() => flag && setHoverFlag(k)}
+                            onMouseLeave={() => setHoverFlag(null)}
+                            style={{
+                              position: "relative",
+                              border: `1px solid ${flag ? sevColor(sev) + "55" : C.line}`,
+                              background: flag ? sevSoft(sev) : C.surface,
+                              borderRadius: 10, padding: "12px 14px",
+                            }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 6 }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>{meta.label}</span>
+                                {flag && (
+                                  <span style={{
+                                    fontFamily: F.mono, fontSize: 10, fontWeight: 600, letterSpacing: ".05em",
+                                    color: sevColor(sev),
+                                    background: "#fff", border: `1px solid ${sevColor(sev)}55`,
+                                    padding: "2px 8px", borderRadius: 999,
+                                  }}>● {flag.issue}</span>
+                                )}
+                                {applied && (
+                                  <span style={{ fontFamily: F.mono, fontSize: 10, color: C.good, letterSpacing: ".05em" }}>✓ FIXED</span>
+                                )}
+                              </div>
+                              {flag && !applied && (
+                                <button onClick={() => applyFix(flag)} style={{
+                                  background: C.ink, color: C.accentInk, border: "none",
+                                  fontFamily: F.body, fontSize: 12, fontWeight: 600,
+                                  padding: "6px 12px", borderRadius: 6, cursor: "pointer",
+                                }}>One-click fix</button>
+                              )}
+                            </div>
+                            {meta.multiline ? (
+                              <textarea
+                                value={plan[k]}
+                                onChange={(e) => updateField(k, e.target.value)}
+                                rows={meta.rows ?? 3}
+                                style={{ ...inputStyle(false), background: "#fff" }}
+                              />
+                            ) : (
+                              <input
+                                value={plan[k]}
+                                onChange={(e) => updateField(k, e.target.value)}
+                                style={{ ...inputStyle(false), background: "#fff" }}
+                              />
+                            )}
+
+                            {/* Hover tooltip with detailed AI suggestion */}
+                            {flag && isHover && (
+                              <div style={{
+                                position: "absolute", left: 14, right: 14, top: "calc(100% + 6px)",
+                                background: C.ink, color: C.accentInk,
+                                borderRadius: 10, padding: 14, zIndex: 50,
+                                boxShadow: "0 12px 32px rgba(0,0,0,.18)",
+                              }}>
+                                <div style={{ fontFamily: F.mono, fontSize: 10, letterSpacing: ".1em", color: "rgba(255,255,255,.55)", marginBottom: 6, textTransform: "uppercase" }}>AI Suggestion</div>
+                                <div style={{ fontSize: 13, lineHeight: 1.55, marginBottom: 10 }}>{flag.suggestion}</div>
+                                <div style={{
+                                  fontFamily: F.mono, fontSize: 11, color: "rgba(255,255,255,.7)",
+                                  background: "rgba(255,255,255,.06)", padding: "8px 10px",
+                                  borderRadius: 6, lineHeight: 1.5,
+                                }}>→ {flag.fix}</div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Comparison: before vs after */}
+                  <div style={{ marginBottom: 24 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 14 }}>
+                      Before · After
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                      <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", background: C.surface }}>
+                        <div style={{ padding: "12px 18px", background: C.badSoft, fontFamily: F.mono, fontSize: 11, color: C.bad, letterSpacing: ".08em", textTransform: "uppercase" }}>✕ Original</div>
+                        <div style={{ padding: 20 }}>
+                          <div style={{ fontSize: 14, color: C.ink2, lineHeight: 1.7, fontStyle: "italic", marginBottom: 18, paddingBottom: 18, borderBottom: `1px solid ${C.lineSoft}` }}>{DEFAULT_PLAN.copy}</div>
+                          <Stat label="Engagement" val="1.2%" tone="bad" />
+                          <Stat label="Sentiment" val="38% positive" tone="bad" />
+                          <Stat label="Backlash Risk" val="HIGH" tone="bad" pill />
+                        </div>
+                      </div>
+                      <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", background: C.surface }}>
+                        <div style={{ padding: "12px 18px", background: C.goodSoft, fontFamily: F.mono, fontSize: 11, color: C.good, letterSpacing: ".08em", textTransform: "uppercase" }}>✓ Optimized</div>
+                        <div style={{ padding: 20 }}>
+                          <div style={{ fontSize: 14, color: C.ink2, lineHeight: 1.7, fontStyle: "italic", marginBottom: 18, paddingBottom: 18, borderBottom: `1px solid ${C.lineSoft}` }}>
+                            {simResult.improvedCopy || plan.copy}
+                          </div>
+                          <Stat label="Engagement" val="4.8%" tone="good" />
+                          <Stat label="Sentiment" val="76% positive" tone="good" />
+                          <Stat label="Backlash Risk" val="LOW" tone="good" pill />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Segment cards */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+                    {simResult.segments.map((seg) => {
+                      const meta = SEGMENT_META[seg.name] ?? { icon: "○" };
+                      return (
+                        <div key={seg.name} style={{
+                          background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 18,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+                            <span style={{ fontSize: 18, color: C.ink }}>{meta.icon}</span>
+                            <span style={{ fontSize: 13, fontWeight: 600 }}>{seg.name}</span>
+                          </div>
+                          <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
+                            <div style={{ height: "100%", width: `${seg.sentimentPct}%`, background: seg.sentimentPct >= 60 ? C.good : seg.sentimentPct >= 40 ? C.warn : C.bad }} />
+                          </div>
+                          <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, marginBottom: 10, letterSpacing: "-0.01em" }}>{seg.sentimentPct}% positive</div>
+                          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>"{seg.topReaction}"</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               )}
             </div>
           </div>
         )}
 
-        {screen === 4 && (
-          <div style={{ background: "#fff", minHeight: "calc(100vh - 56px)" }}>
-            <div style={{ maxWidth: 1020, margin: "0 auto", padding: "48px 28px" }} className="fadeIn">
-              <div style={{ textAlign: "center", marginBottom: 36 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: S.blue, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
-                  <span style={{ width: 6, height: 6, background: S.blue, borderRadius: "50%", display: "inline-block" }} />
-                  After AI Optimization
-                </div>
-                <h2 style={{ fontFamily: "Syne, sans-serif", fontSize: 34, fontWeight: 800, marginBottom: 8 }}>Your Revised Campaign</h2>
-                <p style={{ fontSize: 15, color: S.g500 }}>Updated copy with verified claims, transparent sourcing, and segment-tuned language.</p>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 36 }}>
-                {[
-                  {
-                    header: "✕ Before — Original Copy",
-                    headerBg: S.redPale, headerColor: S.red, borderColor: "#FECACA",
-                    copy: '"Our Most Sustainable Product Yet." — We\'re committed to a greener future. Shop our newest collection and join the movement.',
-                    stats: [
-                      { label: "Engagement Rate", val: "1.2%", color: S.red },
-                      { label: "Sentiment", val: "38% positive", color: S.red },
-                    ],
-                    riskLabel: "HIGH", riskBg: "#FEE2E2", riskColor: S.red,
-                  },
-                  {
-                    header: "✓ After — Optimized Copy",
-                    headerBg: S.greenPale, headerColor: S.green, borderColor: "#A7F3D0",
-                    copy: '"Built with 87% verified recycled materials, certified by XYZ Institute. Our sourcing is fully transparent — see the breakdown below. Because \'sustainable\' should mean something."',
-                    stats: [
-                      { label: "Engagement Rate", val: "4.8%", color: S.green },
-                      { label: "Sentiment", val: "76% positive", color: S.green },
-                    ],
-                    riskLabel: "LOW", riskBg: S.greenPale, riskColor: S.green,
-                  },
-                ].map((c) => (
-                  <div key={c.header} style={{ border: `1.5px solid ${c.borderColor}`, borderRadius: 16, overflow: "hidden" }}>
-                    <div style={{ padding: "15px 22px", background: c.headerBg, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: c.headerColor }}>{c.header}</div>
-                    <div style={{ padding: 22, background: "#fff" }}>
-                      <div style={{ fontSize: 14, color: S.g700, lineHeight: 1.7, fontStyle: "italic", marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${S.g100}` }}>{c.copy}</div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                        {c.stats.map((s) => (
-                          <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, color: S.g500 }}>{s.label}</span>
-                            <span style={{ fontFamily: "Syne, sans-serif", fontSize: 18, fontWeight: 800, color: s.color }}>{s.val}</span>
-                          </div>
-                        ))}
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 13, color: S.g500 }}>Backlash Risk</span>
-                          <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 12px", borderRadius: 20, letterSpacing: ".06em", textTransform: "uppercase", background: c.riskBg, color: c.riskColor }}>{c.riskLabel}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div style={{
-                background: S.g900, borderRadius: 20, padding: "64px 32px", textAlign: "center",
-                position: "relative", overflow: "hidden",
-              }}>
-                <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 30% 50%,rgba(37,99,235,.28) 0%,transparent 60%),radial-gradient(ellipse at 70% 50%,rgba(79,70,229,.2) 0%,transparent 60%)" }} />
-                <div style={{ fontFamily: "Syne, sans-serif", fontSize: 52, fontWeight: 800, color: "#fff", lineHeight: 1.1, marginBottom: 14, position: "relative", zIndex: 1 }}>
-                  Don't guess.<br /><span style={{ color: S.blueLight }}>Simulate.</span>
-                </div>
-                <div style={{ fontSize: 16, color: "rgba(255,255,255,.5)", marginBottom: 36, position: "relative", zIndex: 1 }}>
-                  CampaignIQ pre-tests your message across 20+ audience segments before a single dollar is spent.
-                </div>
-                <button onClick={() => goTo(1)} style={{
-                  background: S.blue, color: "#fff", border: "none",
-                  padding: "15px 40px", borderRadius: 12,
-                  fontFamily: "Syne, sans-serif", fontSize: 16, fontWeight: 700,
-                  cursor: "pointer", position: "relative", zIndex: 1,
-                }}>Start Over →</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-      </div>
+        </div>
       </div>
     </div>
   );
+}
+
+/* ===========================================================
+   Sub-components
+   =========================================================== */
+function PersonaCard({
+  persona, editable, onChange, onRemove,
+}: {
+  persona: Persona;
+  editable: boolean;
+  onChange?: (patch: Partial<Persona>) => void;
+  onRemove?: () => void;
+}) {
+  return (
+    <div style={{
+      border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg,
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
+        <div style={{ flex: 1 }}>
+          {editable ? (
+            <input
+              value={persona.name}
+              onChange={(e) => onChange?.({ name: e.target.value })}
+              style={{ ...miniInput(), fontWeight: 600 }}
+            />
+          ) : (
+            <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>{persona.name}</div>
+          )}
+          {editable ? (
+            <input
+              value={persona.archetype}
+              onChange={(e) => onChange?.({ archetype: e.target.value })}
+              style={{ ...miniInput(), color: C.muted, marginTop: 4 }}
+            />
+          ) : (
+            <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{persona.archetype} · age {persona.age}</div>
+          )}
+        </div>
+        {editable && onRemove && (
+          <button onClick={onRemove} style={{
+            background: "transparent", border: "none", color: C.faint,
+            cursor: "pointer", fontSize: 14, padding: 2,
+          }}>✕</button>
+        )}
+      </div>
+      <div style={{ height: 3, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
+        <div style={{
+          height: "100%", width: `${persona.sentiment}%`,
+          background: persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad,
+        }} />
+      </div>
+      <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".05em", marginBottom: 6 }}>
+        SENTIMENT {persona.sentiment}%
+      </div>
+      {editable ? (
+        <textarea
+          value={persona.quote}
+          onChange={(e) => onChange?.({ quote: e.target.value })}
+          rows={2}
+          style={{ ...miniInput(), fontStyle: "italic" }}
+        />
+      ) : (
+        <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5, fontStyle: "italic" }}>"{persona.quote}"</div>
+      )}
+    </div>
+  );
+}
+
+function RiskMeter({ score }: { score: number }) {
+  const clamped = Math.max(0, Math.min(100, score));
+  return (
+    <div style={{ position: "relative", paddingTop: 18, paddingBottom: 22 }}>
+      <div style={{
+        height: 8, borderRadius: 4, overflow: "hidden",
+        background: `linear-gradient(90deg, ${C.good} 0%, ${C.good} 33%, ${C.warn} 33%, ${C.warn} 66%, ${C.bad} 66%, ${C.bad} 100%)`,
+      }} />
+      {/* Marker */}
+      <div style={{
+        position: "absolute", top: 6, left: `${clamped}%`,
+        transform: "translateX(-50%)",
+        display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
+      }}>
+        <div style={{
+          fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: C.ink,
+          background: "#fff", border: `1px solid ${C.ink}`, borderRadius: 4,
+          padding: "1px 6px", letterSpacing: ".05em",
+        }}>{clamped}</div>
+        <div style={{ width: 2, height: 22, background: C.ink, borderRadius: 1 }} />
+      </div>
+      <div style={{
+        display: "flex", justifyContent: "space-between",
+        marginTop: 8, fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em",
+      }}>
+        <span>LOW</span><span>MEDIUM</span><span>HIGH</span>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, val, tone, pill }: { label: string; val: string; tone: "good" | "bad"; pill?: boolean }) {
+  const color = tone === "good" ? C.good : C.bad;
+  const bg = tone === "good" ? C.goodSoft : C.badSoft;
+  return (
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+      <span style={{ fontSize: 13, color: C.muted }}>{label}</span>
+      {pill ? (
+        <span style={{
+          fontFamily: F.mono, fontSize: 11, fontWeight: 600, letterSpacing: ".06em",
+          background: bg, color, padding: "3px 10px", borderRadius: 999,
+        }}>{val}</span>
+      ) : (
+        <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, color, letterSpacing: "-0.01em" }}>{val}</span>
+      )}
+    </div>
+  );
+}
+
+/* ===========================================================
+   Style helpers
+   =========================================================== */
+function inputStyle(highlight: boolean): React.CSSProperties {
+  return {
+    width: "100%",
+    border: `1px solid ${highlight ? C.ink : C.line}`,
+    background: highlight ? "#FFFFFF" : C.bg,
+    borderRadius: 8,
+    padding: "10px 12px",
+    fontFamily: F.body,
+    fontSize: 14,
+    color: C.ink,
+    lineHeight: 1.5,
+    resize: "vertical",
+  };
+}
+function miniInput(): React.CSSProperties {
+  return {
+    width: "100%", border: `1px solid ${C.line}`, background: "#fff",
+    borderRadius: 6, padding: "5px 8px",
+    fontFamily: F.body, fontSize: 12, color: C.ink, lineHeight: 1.4, resize: "vertical",
+  };
+}
+function carouselBtnStyle(): React.CSSProperties {
+  return {
+    width: 32, height: 32, borderRadius: 8,
+    background: C.surface, border: `1px solid ${C.line}`,
+    color: C.ink, fontSize: 14, cursor: "pointer",
+  };
+}
+function primaryBtnStyle(): React.CSSProperties {
+  return {
+    background: C.ink, color: C.accentInk, border: "none",
+    padding: "12px 22px", borderRadius: 8,
+    fontFamily: F.body, fontSize: 14, fontWeight: 600, cursor: "pointer",
+  };
 }

@@ -3,12 +3,16 @@ name: CampaignIQ design tokens
 description: Color palette, typography, border/radius/animation rules from the brief
 type: design
 ---
-Colors:
-- blue #2563EB, blue-light #3B82F6, blue-pale #EFF6FF, indigo #4F46E5
-- red #EF4444, red-pale #FEF2F2
-- green #10B981, green-pale #ECFDF5, amber #F59E0B
-- gray scale: 50 #F8FAFC, 100 #F1F5F9, 200 #E2E8F0, 400 #94A3B8, 500 #64748B, 700 #334155, 900 #0F172A
+ElevenLabs-inspired monochrome palette (defined in CampaignSimulator.tsx as `C`):
+- bg #FAFAF9 (off-white canvas), surface #FFFFFF
+- ink #0A0A0A (CTAs/type), ink2 #171717, muted #737373, faint #A3A3A3
+- line #E7E5E4, lineSoft #F5F5F4
+- semantic only: good #16A34A / goodSoft #F0FDF4, warn #D97706 / warnSoft #FFFBEB, bad #DC2626 / badSoft #FEF2F2
+- No brand color accents; neutrals only. Black is the accent.
 
-Typography: Syne (700/800) display, DM Sans (300–600) body, both via Google Fonts.
+Typography:
+- Display: Space Grotesk 600/700 (letter-spacing -0.02em on headings)
+- Body: Poppins 300–700
+- Mono / labels / countdowns: JetBrains Mono 400–600
 
-Aesthetic: white-dominant + dark #0F172A panels for contrast moments (countdown, tagline, crisis overlay). Borders over shadows (1.5px solid g200). Radii 8–16px cards, 20px hero. Subtle staggered reveals (~150ms), no springs.
+Aesthetic: 1px hairline borders, soft elevation only on the primary CTA. Radii 6–14px. Pills 999px. Mono labels in caps with .1em tracking. Subtle staggered reveals.
