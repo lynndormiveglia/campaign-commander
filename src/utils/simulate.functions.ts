@@ -1,5 +1,33 @@
 import { createServerFn } from "@tanstack/react-start";
 
+export type CampaignPlan = {
+  name: string;
+  timeline: string;
+  keyMessage: string;
+  hashtag: string;
+  slogan: string;
+  targetAudience: string;
+  copy: string;
+};
+
+export type FieldKey = keyof CampaignPlan;
+
+export type FieldFlag = {
+  field: FieldKey;
+  severity: "low" | "medium" | "high";
+  issue: string;       // short label for the chip
+  suggestion: string;  // detailed fix advice (for hover)
+  fix: string;         // ready-to-paste replacement value
+};
+
+export type Persona = {
+  name: string;
+  archetype: string;
+  age: string;
+  sentiment: number; // 0-100 positive
+  quote: string;
+};
+
 export type SimulationSegment = {
   name: "Gen Z" | "Parents" | "Sustainability Advocates";
   sentimentPct: number;
@@ -9,9 +37,13 @@ export type SimulationSegment = {
 
 export type SimulationResult = {
   segments: SimulationSegment[];
+  personas: Persona[];
   tones: string[];
   risk: "LOW" | "MEDIUM" | "HIGH";
+  riskScore: number; // 0-100, used for the meter needle
   riskRationale: string;
+  flags: FieldFlag[];
+  improvedCopy: string;
 };
 
 export type SimulationResponse =
@@ -20,32 +52,50 @@ export type SimulationResponse =
 
 const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign.
 
-You will be given the raw copy for a marketing campaign. Critique it as if you had just shown it to three audience segments and aggregated their reactions. Be specific to the actual words in the copy — never give generic feedback.
+You will be given a structured campaign plan (name, timeline, key message, hashtag, slogan, target audience, and the actual ad copy). Critique it as if you had just shown it to three audience segments and aggregated their reactions. Be specific to the actual words — never generic feedback.
 
-You MUST call the return_simulation tool with your analysis. Rules:
-- Always return EXACTLY three segments, in this order, with these exact names: "Gen Z", "Parents", "Sustainability Advocates".
-- sentimentPct is the % of that segment that reacts positively (0–100 integer). Vague, defensive, or unsubstantiated copy should score low (10–40). Specific, transparent, evidence-backed copy should score high (60–90).
-- topReaction is a short, in-character quote/observation from that segment (max ~140 chars). Reference something concrete about the copy.
-- fix is one actionable rewrite suggestion targeted at this segment (max ~140 chars).
-- tones: 2–4 short adjectives describing the emotional tone of the copy (e.g. "Defensive", "Vague", "Authentic", "Optimistic", "Corporate", "Confident").
-- risk: LOW / MEDIUM / HIGH backlash risk based on how the copy would land publicly.
-- riskRationale: one sentence explaining the risk level.`;
+You MUST call the return_simulation tool. Rules:
+- segments: EXACTLY three, in order, with names "Gen Z", "Parents", "Sustainability Advocates". sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
+- personas: 3 invented but realistic individual personas drawn from the target audience. Each has name, archetype (e.g. "Eco-skeptical millennial"), age (range like "28–34"), sentiment 0–100, and quote (~120 chars in their voice).
+- tones: 2–4 short adjectives describing the copy's emotional tone.
+- risk: LOW / MEDIUM / HIGH. riskScore 0–100 (0 safest, 100 most dangerous) — must agree with risk band: LOW 0–33, MEDIUM 34–66, HIGH 67–100.
+- riskRationale: one sentence.
+- flags: an array of any field-level problems in the plan. For each problem, set field to one of: name, timeline, keyMessage, hashtag, slogan, targetAudience, copy. severity low/medium/high. issue = short chip label (~6 words). suggestion = detailed fix advice for hover tooltip (~200 chars). fix = ready-to-paste replacement value for that field. Only flag fields that have real risks; skip fields that look fine. If the whole plan is safe, return an empty flags array.
+- improvedCopy: a fully rewritten version of the campaign copy that addresses every flag.`;
 
 export const simulateCampaign = createServerFn({ method: "POST" })
-  .inputValidator((data: { campaignText: string }) => {
-    if (!data || typeof data.campaignText !== "string") {
-      throw new Error("campaignText is required");
+  .inputValidator((data: { plan: CampaignPlan }) => {
+    if (!data || typeof data !== "object" || !data.plan) {
+      throw new Error("plan is required");
     }
-    const text = data.campaignText.trim();
-    if (text.length < 5) throw new Error("Campaign copy is too short.");
-    if (text.length > 4000) throw new Error("Campaign copy is too long.");
-    return { campaignText: text };
+    const p = data.plan;
+    const fields: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","copy"];
+    const clean = {} as CampaignPlan;
+    for (const f of fields) {
+      const v = typeof p[f] === "string" ? p[f].trim() : "";
+      if (v.length > 1000) throw new Error(`${f} is too long.`);
+      clean[f] = v;
+    }
+    if (clean.copy.length < 5) throw new Error("Campaign copy is too short.");
+    return { plan: clean };
   })
   .handler(async ({ data }): Promise<SimulationResponse> => {
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) {
       return { ok: false, error: "AI is not configured. Please try again later." };
     }
+
+    const userMsg = `Campaign plan to simulate:
+
+Name: ${data.plan.name || "(blank)"}
+Timeline: ${data.plan.timeline || "(blank)"}
+Key Message: ${data.plan.keyMessage || "(blank)"}
+Hashtag: ${data.plan.hashtag || "(blank)"}
+Slogan: ${data.plan.slogan || "(blank)"}
+Target Audience: ${data.plan.targetAudience || "(blank)"}
+
+Campaign Copy:
+${data.plan.copy}`;
 
     try {
       const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -58,7 +108,7 @@ export const simulateCampaign = createServerFn({ method: "POST" })
           model: "google/gemini-3-flash-preview",
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: `Campaign copy to simulate:\n\n${data.campaignText}` },
+            { role: "user", content: userMsg },
           ],
           tools: [
             {
@@ -70,9 +120,7 @@ export const simulateCampaign = createServerFn({ method: "POST" })
                   type: "object",
                   properties: {
                     segments: {
-                      type: "array",
-                      minItems: 3,
-                      maxItems: 3,
+                      type: "array", minItems: 3, maxItems: 3,
                       items: {
                         type: "object",
                         properties: {
@@ -85,16 +133,43 @@ export const simulateCampaign = createServerFn({ method: "POST" })
                         additionalProperties: false,
                       },
                     },
-                    tones: {
-                      type: "array",
-                      minItems: 2,
-                      maxItems: 4,
-                      items: { type: "string" },
+                    personas: {
+                      type: "array", minItems: 3, maxItems: 3,
+                      items: {
+                        type: "object",
+                        properties: {
+                          name: { type: "string" },
+                          archetype: { type: "string" },
+                          age: { type: "string" },
+                          sentiment: { type: "integer", minimum: 0, maximum: 100 },
+                          quote: { type: "string" },
+                        },
+                        required: ["name", "archetype", "age", "sentiment", "quote"],
+                        additionalProperties: false,
+                      },
                     },
+                    tones: { type: "array", minItems: 2, maxItems: 4, items: { type: "string" } },
                     risk: { type: "string", enum: ["LOW", "MEDIUM", "HIGH"] },
+                    riskScore: { type: "integer", minimum: 0, maximum: 100 },
                     riskRationale: { type: "string" },
+                    flags: {
+                      type: "array",
+                      items: {
+                        type: "object",
+                        properties: {
+                          field: { type: "string", enum: ["name","timeline","keyMessage","hashtag","slogan","targetAudience","copy"] },
+                          severity: { type: "string", enum: ["low","medium","high"] },
+                          issue: { type: "string" },
+                          suggestion: { type: "string" },
+                          fix: { type: "string" },
+                        },
+                        required: ["field","severity","issue","suggestion","fix"],
+                        additionalProperties: false,
+                      },
+                    },
+                    improvedCopy: { type: "string" },
                   },
-                  required: ["segments", "tones", "risk", "riskRationale"],
+                  required: ["segments","personas","tones","risk","riskScore","riskRationale","flags","improvedCopy"],
                   additionalProperties: false,
                 },
               },
@@ -105,50 +180,41 @@ export const simulateCampaign = createServerFn({ method: "POST" })
       });
 
       if (!res.ok) {
-        if (res.status === 429) {
-          return { ok: false, error: "Too many simulations right now — try again in a moment." };
-        }
-        if (res.status === 402) {
-          return { ok: false, error: "AI credits exhausted. Add credits in Settings → Workspace → Usage." };
-        }
+        if (res.status === 429) return { ok: false, error: "Too many simulations right now — try again in a moment." };
+        if (res.status === 402) return { ok: false, error: "AI credits exhausted. Add credits in Settings → Workspace → Usage." };
         const body = await res.text().catch(() => "");
         console.error("AI gateway error", res.status, body);
         return { ok: false, error: "Couldn't reach the simulator. Please try again." };
       }
 
       const json = await res.json();
-      const toolCall = json?.choices?.[0]?.message?.tool_calls?.[0];
-      const argsStr = toolCall?.function?.arguments;
+      const argsStr = json?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
       if (!argsStr) {
-        console.error("AI gateway: no tool call in response", JSON.stringify(json).slice(0, 500));
+        console.error("AI gateway: no tool call", JSON.stringify(json).slice(0, 500));
         return { ok: false, error: "The simulator returned an unexpected response. Try again." };
       }
 
       let parsed: SimulationResult;
-      try {
-        parsed = JSON.parse(argsStr);
-      } catch (e) {
-        console.error("AI gateway: tool args not valid JSON", argsStr.slice(0, 500));
-        return { ok: false, error: "The simulator returned malformed data. Try again." };
-      }
+      try { parsed = JSON.parse(argsStr); }
+      catch { return { ok: false, error: "The simulator returned malformed data. Try again." }; }
 
-      // Enforce locked segment order
       const order = ["Gen Z", "Parents", "Sustainability Advocates"] as const;
       const sortedSegments = order
         .map((name) => parsed.segments.find((s) => s.name === name))
         .filter((s): s is SimulationSegment => Boolean(s));
-
-      if (sortedSegments.length !== 3) {
-        return { ok: false, error: "The simulator returned incomplete segments. Try again." };
-      }
+      if (sortedSegments.length !== 3) return { ok: false, error: "Incomplete segments. Try again." };
 
       return {
         ok: true,
         data: {
           segments: sortedSegments,
+          personas: parsed.personas.slice(0, 3),
           tones: parsed.tones.slice(0, 4),
           risk: parsed.risk,
+          riskScore: Math.max(0, Math.min(100, parsed.riskScore)),
           riskRationale: parsed.riskRationale,
+          flags: parsed.flags ?? [],
+          improvedCopy: parsed.improvedCopy ?? "",
         },
       };
     } catch (e) {
