@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment, useMemo, useRef } from "react";
+import { useState, useEffect, Fragment, useMemo } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   simulateCampaign,
