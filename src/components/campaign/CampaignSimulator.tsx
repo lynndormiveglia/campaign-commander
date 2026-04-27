@@ -407,6 +407,18 @@ export default function CampaignSimulator() {
         .ciq .dot3{animation:loadDot 1.2s ease-in-out .4s infinite}
         .ciq .fadeIn{animation:ciq-fadeIn .4s ease forwards}
         .ciq .pulseBadge{animation:ciq-pulse 1.4s ease-in-out infinite}
+        @keyframes ciq-spin { to { transform: rotate(360deg); } }
+        @keyframes ciq-shimmer { 0%{background-position:-400px 0} 100%{background-position:400px 0} }
+        .ciq .aiSpin{
+          display:inline-block; width:12px; height:12px; border-radius:999px;
+          border:1.5px solid currentColor; border-top-color:transparent;
+          animation:ciq-spin .7s linear infinite; vertical-align:-2px;
+        }
+        .ciq .aiBar{
+          height:2px; width:100%; border-radius:999px; overflow:hidden;
+          background:linear-gradient(90deg, transparent, rgba(0,0,0,.18), transparent);
+          background-size:400px 100%; animation:ciq-shimmer 1.2s linear infinite;
+        }
         .ciq input:focus, .ciq textarea:focus, .ciq select:focus{outline:none; border-color:${C.ink} !important; background:#fff}
         .ciq button{transition:all .15s ease}
         .ciq button:hover:not(:disabled){transform:translateY(-1px)}
