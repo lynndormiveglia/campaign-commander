@@ -188,7 +188,7 @@ ${data.plan.copy}`;
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "openai/gpt-5",
           messages: [
             { role: "system", content: SYSTEM_PROMPT },
             { role: "user", content: userMsg },
@@ -441,7 +441,7 @@ ${data.copy || "(no copy provided)"}`;
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "openai/gpt-5",
           messages: [
             { role: "system", content: PERSONA_SYSTEM },
             { role: "user", content: userMsg },
@@ -523,7 +523,7 @@ ${data.sourceText}`;
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "openai/gpt-5",
           messages: [
             { role: "system", content: PLAN_EXTRACT_SYSTEM },
             { role: "user", content: userMsg },

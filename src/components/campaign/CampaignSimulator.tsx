@@ -412,7 +412,7 @@ export default function CampaignSimulator() {
         .ciq button:hover:not(:disabled){transform:translateY(-1px)}
         .ciq .rigourSlider{
           -webkit-appearance:none; appearance:none; height:8px; border-radius:999px; outline:none;
-          background:linear-gradient(90deg,#111827 var(--fill,50%), #E7E5E4 var(--fill,50%));
+          background:#E7E5E4;
           transition:background .18s ease;
         }
         .ciq .rigourSlider::-webkit-slider-thumb{
@@ -2181,7 +2181,10 @@ function FocusGroupScreen({
                           value={critiqueRigour}
                           onInput={(e) => setCritiqueRigour(Number((e.target as HTMLInputElement).value))}
                           onChange={(e) => setCritiqueRigour(Number(e.target.value))}
-                          style={{ width: "100%", ["--fill" as string]: `${((critiqueRigour - 1) / 9) * 100}%` }}
+                          style={{
+                            width: "100%",
+                            background: `linear-gradient(90deg, #111827 0%, #111827 ${Math.max(2, ((critiqueRigour - 1) / 9) * 100)}%, #E7E5E4 ${Math.max(2, ((critiqueRigour - 1) / 9) * 100)}%, #E7E5E4 100%)`,
+                          }}
                         />
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.faint, marginTop: 3 }}>
                           <span>Supportive</span>
