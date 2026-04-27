@@ -5,6 +5,7 @@ import {
   scorePersona,
   type SimulationResult,
   type SimulationSegment,
+  type SimulationInsights,
   type CampaignPlan,
   type FieldKey,
   type FieldFlag,
@@ -103,6 +104,13 @@ function sentimentLabel(score: number): string {
 }
 function sentimentColor(score: number): string {
   return score >= 60 ? C.good : score >= 40 ? C.warn : C.bad;
+}
+
+/* Plain-language risk descriptor — replaces the numeric score in the UI. */
+function riskBlurb(risk: SimulationResult["risk"]): string {
+  if (risk === "LOW") return "Likely safe to ship — minor tweaks at most.";
+  if (risk === "MEDIUM") return "Some risk — review the flagged fields before launch.";
+  return "High chance of backlash — rewrite before sending.";
 }
 
 type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" };
@@ -208,7 +216,13 @@ export default function CampaignSimulator() {
   const removeCustomPersona = (idx: number) =>
     setCustomPersonas((prev) => prev.filter((_, i) => i !== idx));
 
-  const navSteps = ["Launch", "Crisis", "Simulate", "Focus Group", "Results"];
+  const navSteps: { label: string; screen: number }[] = [
+    { label: "Launch",      screen: 1 },
+    { label: "Crisis",      screen: 2 },
+    { label: "Simulate",    screen: 3 },
+    { label: "Results",     screen: 5 },
+    { label: "Focus Group", screen: 4 },
+  ];
 
   return (
     <div style={{ fontFamily: F.body, background: C.bg, minHeight: "100vh", color: C.ink }}>
@@ -247,12 +261,12 @@ export default function CampaignSimulator() {
             <span style={{ fontFamily: F.mono, background: C.lineSoft, color: C.muted, padding: "2px 7px", borderRadius: 4, fontSize: 10, letterSpacing: ".05em" }}>DEMO</span>
           </div>
           <div style={{ display: "flex", gap: 2 }}>
-            {navSteps.map((label, i) => (
-              <button key={label} onClick={() => goTo(i + 1)} style={{
+            {navSteps.map(({ label, screen: s }) => (
+              <button key={label} onClick={() => goTo(s)} style={{
                 padding: "6px 14px", borderRadius: 6, border: "none",
                 fontFamily: F.body, fontSize: 13, fontWeight: 500, cursor: "pointer",
-                background: screen === i + 1 ? C.ink : "transparent",
-                color: screen === i + 1 ? C.accentInk : C.muted,
+                background: screen === s ? C.ink : "transparent",
+                color: screen === s ? C.accentInk : C.muted,
               }}>{label}</button>
             ))}
           </div>
@@ -375,8 +389,7 @@ export default function CampaignSimulator() {
                       <div style={{ fontFamily: F.mono, fontSize: 10, color: "rgba(255,255,255,.45)", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 10 }}>Backlash Risk</div>
                       <span className="pulseBadge" style={{
                         display: "inline-flex", alignItems: "center", gap: 8,
-                        fontFamily: F.mono, color: "#fff", fontSize: 13, fontWeight: 600, letterSpacing: ".05em",
-                        textDecoration: "underline", textDecorationColor: "#FCA5A5", textUnderlineOffset: 4,
+                        fontFamily: F.mono, color: "#FCA5A5", fontSize: 13, fontWeight: 700, letterSpacing: ".05em",
                       }}>HIGH — ESCALATING</span>
                     </div>
                   </div>
@@ -384,7 +397,9 @@ export default function CampaignSimulator() {
                     {COMMENTS.map((c) => (
                       <div key={c.id} style={{
                         background: "rgba(255,255,255,.04)",
-                        borderLeft: `2px solid ${c.type === "neutral" ? "rgba(255,255,255,.25)" : "rgba(255,255,255,.45)"}`,
+                        borderLeft: c.type === "negative"
+                          ? `3px solid #FCA5A5`
+                          : `2px solid rgba(255,255,255,.25)`,
                         borderRadius: "0 8px 8px 0", padding: "12px 14px",
                         transition: "all .4s",
                         opacity: visibleComments.includes(c.id) ? 1 : 0,
@@ -453,12 +468,12 @@ export default function CampaignSimulator() {
            ===================================================== */}
         {screen === 3 && (
           <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
-            <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
-              <div style={{ marginBottom: 32 }}>
-                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● PRE-LAUNCH SIMULATOR</div>
-                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, marginBottom: 10, letterSpacing: "-0.02em" }}>Campaign Plan</h2>
-                <p style={{ fontSize: 15, color: C.muted, maxWidth: 600 }}>
-                  Fill in the details, then simulate the audience reaction. Predicted personas use the <strong style={{ color: C.ink }}>VALS</strong> framework. Add custom personas anchored to VALS, Pew, or generation.
+            <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 28px 40px" }} className="fadeIn">
+              <div style={{ marginBottom: 20 }}>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 6 }}>● PRE-LAUNCH SIMULATOR</div>
+                <h2 style={{ fontFamily: F.display, fontSize: 30, fontWeight: 700, marginBottom: 6, letterSpacing: "-0.02em" }}>Campaign Plan</h2>
+                <p style={{ fontSize: 14, color: C.muted, maxWidth: 640, lineHeight: 1.5, margin: 0 }}>
+                  Fill in the details, then simulate the audience reaction. The simulator surfaces broad audience segments most likely to engage — and you can add your own custom panelists below.
                 </p>
               </div>
 
@@ -471,19 +486,17 @@ export default function CampaignSimulator() {
                   simulating={simulating}
                   error={simError}
                   ctaLabel="Simulate Audience Reaction"
-                  hasResult={!!simResult}
-                  onSeeResults={() => goTo(5)}
                 />
 
                 {/* RIGHT — Audience segments + custom personas */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                   <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
                     <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6 }}>
-                      VALS Audience Segments
+                      Audience Segments
                     </div>
                     <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 14 }}>
                       {simResult
-                        ? "Three broad audience groups — derived from Values & Lifestyles + generation."
+                        ? "Three broad audience groups most likely to react to your campaign."
                         : "Run a simulation to surface the audience segments most affected by your copy."}
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -578,55 +591,72 @@ export default function CampaignSimulator() {
                 </div>
               </div>
 
-              {/* Inline simulation results */}
+              {/* Inline simulation results — compact stacking */}
               {simResult && (
-                <div style={{ marginTop: 32, display: "grid", gap: 18 }} className="fadeIn">
+                <div style={{ marginTop: 24, display: "grid", gap: 12 }} className="fadeIn">
+                  {/* Risk meter — top, compact card with tones inline */}
+                  <div style={{
+                    background: C.surface, border: `1px solid ${C.line}`,
+                    borderRadius: 12, padding: "14px 18px",
+                  }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+                      <div style={{ flexShrink: 0, maxWidth: 260 }}>
+                        <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 2 }}>
+                          Backlash Risk
+                        </div>
+                        <div style={{
+                          fontFamily: F.display, fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em",
+                          color: simResult.risk === "LOW" ? C.good : simResult.risk === "MEDIUM" ? C.warn : C.bad,
+                          lineHeight: 1.1,
+                        }}>
+                          {simResult.risk}
+                        </div>
+                        <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+                          {riskBlurb(simResult.risk)}
+                        </div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 220 }}>
+                        <RiskMeter score={simResult.riskScore} compact />
+                      </div>
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.lineSoft}` }}>
+                      <p style={{ flex: 1, minWidth: 220, fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
+                        {simResult.riskRationale}
+                      </p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                        {simResult.tones.map((t) => (
+                          <span key={t} style={{
+                            fontFamily: F.mono, fontSize: 11, color: C.ink,
+                            background: C.lineSoft, padding: "3px 9px", borderRadius: 999,
+                            letterSpacing: ".03em",
+                          }}>{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Audience Sentiment — compact 3-up grid */}
                   <SectionHeader>Audience Sentiment</SectionHeader>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
                     {simResult.segments.map((seg) => {
                       const tone = sentimentColor(seg.sentimentPct);
                       return (
-                        <div key={seg.name} style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 18 }}>
-                          <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8 }}>VALS Segment</div>
-                          <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, marginBottom: 12, letterSpacing: "-0.01em" }}>{seg.name}</div>
-                          <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
+                        <div key={seg.name} style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, padding: "12px 14px" }}>
+                          <div style={{ fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 8, lineHeight: 1.25 }}>{seg.name}</div>
+                          <div style={{ height: 3, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
                             <div style={{ height: "100%", width: `${seg.sentimentPct}%`, background: tone }} />
                           </div>
                           <div style={{
-                            fontFamily: F.display, fontSize: 22, fontWeight: 700,
-                            marginBottom: 10, letterSpacing: "-0.01em", color: tone,
+                            fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: tone,
+                            letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 6,
                           }}>{sentimentLabel(seg.sentimentPct)}</div>
-                          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>"{seg.topReaction}"</div>
+                          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, fontStyle: "italic" }}>"{seg.topReaction}"</div>
                         </div>
                       );
                     })}
                   </div>
 
-                  <SectionHeader>Emotional Tone Analysis</SectionHeader>
-                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 20, display: "flex", flexWrap: "wrap", gap: 8 }}>
-                    {simResult.tones.map((t) => (
-                      <span key={t} style={{
-                        fontFamily: F.mono, fontSize: 12, color: C.ink,
-                        background: C.lineSoft, padding: "6px 12px", borderRadius: 999,
-                        letterSpacing: ".04em",
-                      }}>{t}</span>
-                    ))}
-                  </div>
-
-                  <SectionHeader>Backlash Risk Meter</SectionHeader>
-                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 20 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 10 }}>
-                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>{simResult.risk}</div>
-                      <div style={{ fontFamily: F.display, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em" }}>{simResult.riskScore}/100</div>
-                    </div>
-                    <RiskMeter score={simResult.riskScore} />
-                    <p style={{ fontSize: 13, color: C.muted, marginTop: 14, lineHeight: 1.6 }}>{simResult.riskRationale}</p>
-                  </div>
-
-                  <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-                    <button onClick={() => goTo(4)} style={{ ...primaryBtnStyle(), background: C.surface, color: C.ink, border: `1px solid ${C.line}` }}>
-                      Open Focus Group →
-                    </button>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
                     <button onClick={() => goTo(5)} style={primaryBtnStyle()}>
                       See how to improve →
                     </button>
@@ -769,11 +799,11 @@ export default function CampaignSimulator() {
                       </div>
                     </div>
 
-                    {/* RIGHT — VALS audience segments (mirroring Simulate page structure) */}
+                    {/* RIGHT — Audience segments (mirroring Simulate page structure) */}
                     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                       <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
                         <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 14 }}>
-                          VALS Audience Segments
+                          Audience Segments
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                           {simResult.segments.map((s, i) => <SegmentCard key={`r-seg-${i}`} segment={s} />)}
@@ -818,6 +848,12 @@ export default function CampaignSimulator() {
                       </div>
                     </div>
                   </div>
+
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}>
+                    <button onClick={() => goTo(4)} style={primaryBtnStyle()}>
+                      See your focus group →
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -834,7 +870,7 @@ export default function CampaignSimulator() {
    Reusable: Campaign form card (used by Simulate)
    =========================================================== */
 function CampaignFormCard({
-  plan, updateField, onSimulate, simulating, error, ctaLabel, hasResult, onSeeResults,
+  plan, updateField, onSimulate, simulating, error, ctaLabel,
 }: {
   plan: CampaignPlan;
   updateField: (k: FieldKey, v: string) => void;
@@ -842,8 +878,6 @@ function CampaignFormCard({
   simulating: boolean;
   error: string | null;
   ctaLabel: string;
-  hasResult: boolean;
-  onSeeResults: () => void;
 }) {
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
@@ -897,13 +931,6 @@ function CampaignFormCard({
             <>Running <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
           ) : ctaLabel}
         </button>
-        {hasResult && (
-          <button onClick={onSeeResults} style={{
-            background: "transparent", color: C.ink, border: `1px solid ${C.ink}`,
-            padding: "12px 22px", borderRadius: 8,
-            fontFamily: F.body, fontSize: 14, fontWeight: 600, cursor: "pointer",
-          }}>See improvements →</button>
-        )}
       </div>
 
       {error && (
@@ -1005,7 +1032,7 @@ function SegmentCard({ segment }: { segment: SimulationSegment }) {
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
       <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>
-        VALS Segment
+        Audience Segment
       </div>
       <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 10 }}>
         {segment.name}
@@ -1073,7 +1100,7 @@ function FocusGroupScreen({
   onGoSimulate: () => void;
   onGoResults: () => void;
 }) {
-  const [tab, setTab] = useState<"transcript" | "personas">("transcript");
+  const [tab, setTab] = useState<"conclusion" | "personas" | "transcript">("conclusion");
 
   const allPersonas: Array<{ persona: Persona; custom: boolean }> = useMemo(() => [
     ...(simResult?.personas ?? []).map((p) => ({ persona: p, custom: false })),
@@ -1090,7 +1117,7 @@ function FocusGroupScreen({
           <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● SYNTHETIC FOCUS GROUP</div>
           <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>Round-table reactions.</h2>
           <p style={{ fontSize: 15, color: C.muted, maxWidth: 620 }}>
-            Meet your panel. Each participant is a realistic individual grounded in VALS — they react in their own voice and challenge each other.
+            Meet your panel. Each participant is a realistic individual built from your audience — they react in their own voice and challenge each other.
           </p>
         </div>
 
@@ -1128,8 +1155,9 @@ function FocusGroupScreen({
               background: C.lineSoft, borderRadius: 10, padding: 4,
             }}>
               {([
+                ["conclusion", "Conclusion"],
+                ["personas",   "Personas"],
                 ["transcript", "Transcript"],
-                ["personas", "Personas"],
               ] as const).map(([v, l]) => (
                 <button key={v} onClick={() => setTab(v)} style={{
                   padding: "7px 16px", borderRadius: 7, border: "none",
@@ -1140,6 +1168,14 @@ function FocusGroupScreen({
                 }}>{l}</button>
               ))}
             </div>
+
+            {tab === "conclusion" && (
+              <ConclusionTab
+                insights={simResult.insights}
+                avg={avg}
+                risk={simResult.risk}
+              />
+            )}
 
             {tab === "transcript" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 20, alignItems: "start" }}>
@@ -1249,6 +1285,124 @@ function FocusGroupScreen({
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function ConclusionTab({
+  insights, avg, risk,
+}: {
+  insights: SimulationInsights;
+  avg: number;
+  risk: SimulationResult["risk"];
+}) {
+  const sentLabel = sentimentLabel(avg);
+  const sentColor = sentimentColor(avg);
+  const empty =
+    insights.whatWorks.length === 0 &&
+    insights.whatDoesnt.length === 0 &&
+    insights.opportunities.length === 0 &&
+    insights.suggestedTweaks.length === 0 &&
+    !insights.predictedPerformance;
+
+  if (empty) {
+    return (
+      <div style={{
+        background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14,
+        padding: 28, textAlign: "center",
+      }}>
+        <p style={{ color: C.muted, lineHeight: 1.5, margin: 0 }}>
+          No conclusion was generated for this run. Re-simulate to produce updated insights.
+        </p>
+      </div>
+    );
+  }
+
+  const sections: { title: string; items: string[]; tone: string; toneSoft: string; border: string }[] = [
+    { title: "What Works",       items: insights.whatWorks,       tone: C.good, toneSoft: C.goodSoft, border: "#A7F3D0" },
+    { title: "What Doesn't",     items: insights.whatDoesnt,      tone: C.bad,  toneSoft: C.badSoft,  border: "#FECACA" },
+    { title: "Opportunities",    items: insights.opportunities,   tone: C.ink,  toneSoft: C.lineSoft, border: C.line },
+    { title: "Suggested Tweaks", items: insights.suggestedTweaks, tone: C.warn, toneSoft: C.warnSoft, border: "#FDE68A" },
+  ];
+
+  return (
+    <div style={{ display: "grid", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        {sections.map((s) => (
+          <div key={s.title} style={{
+            background: s.toneSoft, border: `1px solid ${s.border}`,
+            borderRadius: 12, padding: 18,
+          }}>
+            <div style={{
+              fontFamily: F.mono, fontSize: 11, fontWeight: 700,
+              color: s.tone, letterSpacing: ".06em", textTransform: "uppercase",
+              marginBottom: 12,
+            }}>
+              {s.title}
+            </div>
+            {s.items.length === 0 ? (
+              <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Nothing to flag here.</div>
+            ) : (
+              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                {s.items.map((item, i) => (
+                  <li key={i} style={{ display: "flex", gap: 8, fontSize: 13, lineHeight: 1.55, color: C.ink }}>
+                    <span style={{ color: s.tone, fontWeight: 700, flexShrink: 0 }}>→</span>
+                    <span>{item}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {insights.predictedPerformance && (
+        <div style={{
+          background: C.surface, border: `1px solid ${C.line}`,
+          borderRadius: 12, padding: 22,
+        }}>
+          <div style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: C.ink, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 10 }}>
+            Predicted Performance
+          </div>
+          <p style={{ fontSize: 14, lineHeight: 1.7, color: C.ink2, margin: "0 0 16px", fontStyle: "italic" }}>
+            {insights.predictedPerformance}
+          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: 18, paddingTop: 14, borderTop: `1px solid ${C.lineSoft}`, flexWrap: "wrap" }}>
+            <div>
+              <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
+                Overall Mood
+              </div>
+              <div style={{ fontFamily: F.display, fontSize: 18, fontWeight: 700, color: sentColor, letterSpacing: "-0.01em" }}>
+                {sentLabel}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
+                Backlash Risk
+              </div>
+              <div style={{
+                fontFamily: F.display, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em",
+                color: risk === "LOW" ? C.good : risk === "MEDIUM" ? C.warn : C.bad,
+              }}>
+                {risk}
+              </div>
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ height: 6, background: C.lineSoft, borderRadius: 3, overflow: "hidden" }}>
+                <div style={{
+                  height: "100%", borderRadius: 3,
+                  background: `linear-gradient(90deg, ${C.bad}, ${C.warn}, ${C.good})`,
+                  width: `${Math.max(4, avg)}%`,
+                  transition: "width .8s ease",
+                }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".06em" }}>
+                <span>CRITICAL</span><span>NEUTRAL</span><span>POSITIVE</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1406,27 +1560,30 @@ function closingSuggestion(p: Persona): string {
   return "Drop the marketing-speak entirely. Show data, sources, real customers — anything that signals you actually mean it.";
 }
 
-function RiskMeter({ score }: { score: number }) {
+function RiskMeter({ score, compact = false }: { score: number; compact?: boolean }) {
   const clamped = Math.max(0, Math.min(100, score));
+  const padTop = compact ? 6 : 12;
+  const padBottom = compact ? 12 : 18;
+  const tickHeight = compact ? 16 : 22;
   return (
-    <div style={{ position: "relative", paddingTop: 18, paddingBottom: 22 }}>
+    <div style={{ position: "relative", paddingTop: padTop, paddingBottom: padBottom }}>
       <div style={{
-        height: 8, borderRadius: 4, overflow: "hidden",
+        height: compact ? 6 : 8, borderRadius: 4, overflow: "hidden",
         background: `linear-gradient(90deg, ${C.good} 0%, ${C.good} 33%, ${C.warn} 33%, ${C.warn} 66%, ${C.bad} 66%, ${C.bad} 100%)`,
       }} />
-      <div style={{
-        position: "absolute", top: 6, left: `${clamped}%`,
-        transform: "translateX(-50%)",
-        display: "flex", flexDirection: "column", alignItems: "center", gap: 2,
-      }}>
-        <div style={{
-          fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: C.ink,
-          background: "#fff", border: `1px solid ${C.ink}`, borderRadius: 4,
-          padding: "1px 6px", letterSpacing: ".05em",
-        }}>{clamped}</div>
-        <div style={{ width: 2, height: 22, background: C.ink, borderRadius: 1 }} />
-      </div>
-      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8, fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em" }}>
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: padTop - (compact ? 4 : 6),
+          left: `${clamped}%`,
+          transform: "translateX(-50%)",
+          width: 2, height: tickHeight,
+          background: C.ink, borderRadius: 1,
+          boxShadow: "0 0 0 3px #fff",
+        }}
+      />
+      <div style={{ display: "flex", justifyContent: "space-between", marginTop: compact ? 4 : 8, fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".08em" }}>
         <span>LOW</span><span>MEDIUM</span><span>HIGH</span>
       </div>
     </div>
@@ -1464,11 +1621,10 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function PersonaHintPanel() {
   const groups: { label: string; items: string }[] = [
-    { label: "Demographics",   items: "age range, generation (Gen Z, Millennials, Gen X, Boomers), location, income bracket, occupation" },
-    { label: "Psychographics", items: "values, beliefs, political leanings, concerns, what they distrust or feel loyal to" },
-    { label: "Lifestyle",      items: "hobbies, media habits, brands they buy, how they shop, social-media platforms" },
-    { label: "VALS framework", items: "Innovators, Thinkers, Achievers, Experiencers, Believers, Strivers, Makers, Survivors" },
-    { label: "Pew typology",   items: "Progressive Left, Establishment Liberals, Stressed Sideliners, Populist Right, Faith and Flag Conservatives, etc." },
+    { label: "Who they are", items: "age range, generation (Gen Z, Millennials, Gen X, Boomers), location, income bracket, occupation" },
+    { label: "What they care about", items: "values, beliefs, political leanings, concerns, what they distrust or feel loyal to" },
+    { label: "How they live", items: "hobbies, media habits, brands they buy, how they shop, social-media platforms" },
+    { label: "Mindset", items: "trend-driven, deal-driven, security-driven, principle-driven, status-conscious, eco-conscious, etc." },
   ];
   return (
     <div style={{
@@ -1480,7 +1636,7 @@ function PersonaHintPanel() {
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {groups.map((g) => (
-          <div key={g.label} style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 10 }}>
+          <div key={g.label} style={{ display: "grid", gridTemplateColumns: "140px 1fr", gap: 10 }}>
             <div style={{ fontFamily: F.mono, fontSize: 10, color: C.ink, fontWeight: 600, letterSpacing: ".04em" }}>
               {g.label}
             </div>

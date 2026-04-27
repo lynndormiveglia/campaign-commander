@@ -22,7 +22,7 @@ export type FieldFlag = {
 
 export type Persona = {
   name: string;       // realistic first + last name (e.g. "Zoe Chen")
-  archetype: string;  // VALS type + lifestyle line
+  archetype: string;  // plain-English lifestyle / mindset descriptor
   age: string;        // generational range (e.g. "Gen Z (18–27)")
   job: string;        // realistic occupation
   traits: string[];   // 3 short adjectives
@@ -30,7 +30,7 @@ export type Persona = {
   quote: string;
 };
 
-/* VALS / Pew / Generational anchor catalog used by the persona builder. */
+/* Reference catalog (kept for internal use only — not surfaced to users). */
 export const PERSONA_ANCHORS = {
   vals: [
     "Innovators","Thinkers","Achievers","Experiencers",
@@ -46,10 +46,18 @@ export const PERSONA_ANCHORS = {
 } as const;
 
 export type SimulationSegment = {
-  name: string; // VALS-based segment label
+  name: string; // broad audience segment label (e.g. "Gen Z Fashion Lovers")
   sentimentPct: number;
   topReaction: string;
   fix: string;
+};
+
+export type SimulationInsights = {
+  whatWorks: string[];           // 2–4 bullets
+  whatDoesnt: string[];          // 2–4 bullets
+  opportunities: string[];       // 2–3 bullets
+  suggestedTweaks: string[];     // 2–4 bullets
+  predictedPerformance: string;  // 1 short paragraph
 };
 
 export type SimulationResult = {
@@ -61,21 +69,22 @@ export type SimulationResult = {
   riskRationale: string;
   flags: FieldFlag[];
   improvedCopy: string;
+  insights: SimulationInsights;
 };
 
 export type SimulationResponse =
   | { ok: true; data: SimulationResult }
   | { ok: false; error: string };
 
-const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign, grounded in the VALS (Values & Lifestyles) framework.
+const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign. You may rely on standard consumer-segmentation thinking internally, but NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers", "Experiencers", "Believers", "Makers", "Survivors") in any user-facing output field. Use plain English consumers would recognize.
 
 You will be given a structured campaign plan (name, timeline, key message, hashtag, slogan, target audience, and the actual ad copy). Critique it as if you had just shown it to three audience segments and aggregated their reactions. Be specific to the actual words — never generic feedback.
 
 You MUST call the return_simulation tool. Rules:
-- segments: EXACTLY three audience CATEGORIES (NOT individual people) most relevant to the target audience. Each name is a broad consumer category phrased like "Gen Z Fashion Lovers", "Eco-Curious Millennial Parents", "Skeptical Gen X Professionals" — derive these from the VALS framework (Innovators, Thinkers, Achievers, Experiencers, Believers, Strivers, Makers, Survivors) blended with generation. sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
-- personas: EXACTLY 3 realistic individual focus-group participants who together represent the target audience. Each persona must be grounded in the VALS framework but feel like a believable real person:
+- segments: EXACTLY three audience CATEGORIES (NOT individual people) most relevant to the target audience. Each name is a broad consumer category phrased like "Gen Z Fashion Lovers", "Eco-Curious Millennial Parents", "Skeptical Gen X Professionals" — combine generation, lifestyle and mindset into a plain-English label. sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
+- personas: EXACTLY 3 realistic individual focus-group participants who together represent the target audience. Each persona should feel like a believable real person:
   • name: a realistic first + last name (e.g. "Zoe Chen", "Marcus Webb", "Priya Nair", "Devon Park"). NEVER use category labels.
-  • archetype: their VALS type plus a one-line lifestyle descriptor (e.g. "Achiever · status-driven, success-oriented").
+  • archetype: a plain-English one-line lifestyle/mindset descriptor (e.g. "Status-driven young professional", "Pragmatic budget shopper", "Principled sustainability advocate"). Do NOT use any segmentation-framework terminology.
   • age: generational range like "Gen Z (18–27)" or "Millennials (29–44)".
   • job: a realistic occupation (e.g. "Grad Student", "Sustainability Consultant", "Creative Director").
   • traits: an array of EXACTLY 3 short adjectives describing personality (e.g. ["Practical","Vocal","Skeptical"]).
@@ -85,7 +94,13 @@ You MUST call the return_simulation tool. Rules:
 - risk: LOW / MEDIUM / HIGH. riskScore 0–100 (0 safest, 100 most dangerous) — must agree with risk band: LOW 0–33, MEDIUM 34–66, HIGH 67–100.
 - riskRationale: one sentence.
 - flags: an array of any field-level problems in the plan. For each problem, set field to one of: name, timeline, keyMessage, hashtag, slogan, targetAudience, copy. severity low/medium/high. issue = short chip label (~6 words). suggestion = detailed fix advice for hover tooltip (~200 chars). fix = ready-to-paste replacement value for that field. Only flag fields that have real risks; skip fields that look fine. If the whole plan is safe, return an empty flags array.
-- improvedCopy: a fully rewritten version of the campaign copy that addresses every flag.`;
+- improvedCopy: a fully rewritten version of the campaign copy that addresses every flag.
+- insights: an object summarizing the focus group's verdict in plain English. Treat each bullet as a short, high-signal observation (~140 chars max), not a full essay.
+  • whatWorks: 2–4 bullet sentences highlighting what the campaign actually does well.
+  • whatDoesnt: 2–4 bullet sentences identifying what falls flat or risks backlash.
+  • opportunities: 2–3 bullet sentences with untapped angles or insights the campaign could lean into.
+  • suggestedTweaks: 2–4 bullet sentences with specific, tactical changes (concrete edits, not generic advice).
+  • predictedPerformance: a single short paragraph (~3 sentences) predicting how this campaign would actually perform once it ships — engagement quality, sentiment skew, likely community response.`;
 
 export const simulateCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { plan: CampaignPlan }) => {
@@ -194,8 +209,20 @@ ${data.plan.copy}`;
                       },
                     },
                     improvedCopy: { type: "string" },
+                    insights: {
+                      type: "object",
+                      properties: {
+                        whatWorks:            { type: "array", minItems: 2, maxItems: 4, items: { type: "string" } },
+                        whatDoesnt:           { type: "array", minItems: 2, maxItems: 4, items: { type: "string" } },
+                        opportunities:        { type: "array", minItems: 2, maxItems: 3, items: { type: "string" } },
+                        suggestedTweaks:      { type: "array", minItems: 2, maxItems: 4, items: { type: "string" } },
+                        predictedPerformance: { type: "string" },
+                      },
+                      required: ["whatWorks","whatDoesnt","opportunities","suggestedTweaks","predictedPerformance"],
+                      additionalProperties: false,
+                    },
                   },
-                  required: ["segments","personas","tones","risk","riskScore","riskRationale","flags","improvedCopy"],
+                  required: ["segments","personas","tones","risk","riskScore","riskRationale","flags","improvedCopy","insights"],
                   additionalProperties: false,
                 },
               },
@@ -237,6 +264,15 @@ ${data.plan.copy}`;
         quote: p.quote ?? "",
       }));
 
+      const rawInsights = (parsed as { insights?: Partial<SimulationInsights> }).insights ?? {};
+      const cleanedInsights: SimulationInsights = {
+        whatWorks:            Array.isArray(rawInsights.whatWorks)       ? rawInsights.whatWorks.slice(0, 4)       : [],
+        whatDoesnt:           Array.isArray(rawInsights.whatDoesnt)      ? rawInsights.whatDoesnt.slice(0, 4)      : [],
+        opportunities:        Array.isArray(rawInsights.opportunities)   ? rawInsights.opportunities.slice(0, 3)   : [],
+        suggestedTweaks:      Array.isArray(rawInsights.suggestedTweaks) ? rawInsights.suggestedTweaks.slice(0, 4) : [],
+        predictedPerformance: typeof rawInsights.predictedPerformance === "string" ? rawInsights.predictedPerformance : "",
+      };
+
       return {
         ok: true,
         data: {
@@ -248,6 +284,7 @@ ${data.plan.copy}`;
           riskRationale: parsed.riskRationale,
           flags: parsed.flags ?? [],
           improvedCopy: parsed.improvedCopy ?? "",
+          insights: cleanedInsights,
         },
       };
     } catch (e) {
@@ -257,17 +294,19 @@ ${data.plan.copy}`;
   });
 
 /* ===========================================================
-   Custom persona scoring — uses VALS / Pew / Generation anchors
+   Custom persona scoring — free-form audience description
    =========================================================== */
 export type PersonaScoreResponse =
   | { ok: true; persona: Persona }
   | { ok: false; error: string };
 
-const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a free-form description of a target audience member and the campaign copy, produce a realistic synthetic individual focus-group participant. Infer any missing details (VALS type, generation, occupation, etc.) from the description in a way that is consistent with what the user wrote.
+const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a free-form description of a target audience member and the campaign copy, produce a realistic synthetic individual focus-group participant. Infer any missing details (lifestyle, generation, occupation, mindset, etc.) from the description.
+
+NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers") in any output field — use plain English a marketer would recognize.
 
 You MUST call the return_persona tool with:
 - name: a realistic first + last name (e.g. "Maya Patel", "Jordan Reeves") — NEVER a category label.
-- archetype: VALS type + one-line lifestyle descriptor (infer the VALS type from the description).
+- archetype: a plain-English one-line lifestyle/mindset descriptor (e.g. "Pragmatic budget shopper", "Principled sustainability advocate"). No framework jargon.
 - age: generational range like "Millennials (29–44)" (inferred from description).
 - job: a realistic occupation (e.g. "High-school teacher", "Product manager").
 - traits: an array of EXACTLY 3 short adjectives describing personality.
