@@ -1,4 +1,4 @@
-import { useState, useEffect, Fragment, useMemo } from "react";
+import { useState, useEffect, Fragment, useMemo, useRef } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   simulateCampaign,
@@ -61,9 +61,10 @@ const FIELD_META: Record<FieldKey, { label: string; placeholder: string; multili
   hashtag:        { label: "Hashtag",         placeholder: "#GreenerTogether" },
   slogan:         { label: "Slogan",          placeholder: "A tighter, punchier line." },
   targetAudience: { label: "Target Audience", placeholder: "e.g. Eco-curious millennials & Gen Z, US/EU urban", multiline: true, rows: 2 },
+  location:       { label: "Location / Markets", placeholder: "e.g. United States, EU, urban Tier-1 cities" },
   copy:           { label: "Campaign Copy",   placeholder: "The actual ad copy that audiences will see.", multiline: true, rows: 5 },
 };
-const FIELD_ORDER: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","copy"];
+const FIELD_ORDER: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","location","copy"];
 
 const DEFAULT_PLAN: CampaignPlan = {
   name: "Greener Fall Drop 2026",
@@ -72,6 +73,7 @@ const DEFAULT_PLAN: CampaignPlan = {
   hashtag: "#GreenerTogether",
   slogan: "Sustainable. Finally.",
   targetAudience: "Eco-conscious Gen Z & millennial shoppers in US/EU urban areas.",
+  location: "United States & EU — urban Tier-1 cities",
   copy: '"Our Most Sustainable Product Yet." — We\'re committed to a greener future. Shop our newest collection and join the movement.',
 };
 
@@ -113,13 +115,13 @@ function riskBlurb(risk: SimulationResult["risk"]): string {
   return "High chance of backlash — rewrite before sending.";
 }
 
-type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" };
+type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" | "positive" };
 const COMMENTS: Comment[] = [
   { id: 1, user: "@_realconsumer · 2m ago", text: '"This feels like greenwashing. Zero specifics, just vibes. 🙄"', type: "negative" },
   { id: 2, user: "@sustainableskeptic · 5m ago", text: '"Who is this even for? The vagueness is insulting."', type: "negative" },
   { id: 3, user: "@climate_watchdog · 11m ago", text: '"Another brand pretending to care without showing any proof."', type: "negative" },
   { id: 4, user: "@shoppingmaybe · 18m ago", text: '"What does \'most sustainable\' even mean? Compared to what?"', type: "neutral" },
-  { id: 5, user: "@ethicswatch · 24m ago", text: '"No certifications. No data. Just marketing copy. Pass."', type: "negative" },
+  { id: 5, user: "@earthfirst_amy · 26m ago", text: '"Finally a brand putting sustainability front and center — adding to cart now! 🌱"', type: "positive" },
 ];
 
 /* ===========================================================
@@ -133,6 +135,8 @@ export default function CampaignSimulator() {
 
   const [plan, setPlan] = useState<CampaignPlan>(DEFAULT_PLAN);
   const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
+  const [recentlyDeletedPersona, setRecentlyDeletedPersona] = useState<{ persona: Persona; index: number } | null>(null);
+  const deleteUndoTimeoutRef = useRef<number | null>(null);
   const [draftDescription, setDraftDescription] = useState("");
   const [hintsOpen, setHintsOpen] = useState(false);
   const [scoringPersona, setScoringPersona] = useState(false);
@@ -149,6 +153,14 @@ export default function CampaignSimulator() {
   const countdown = useCountdown(23 * 3600 + 59 * 60);
   const simulateFn = useServerFn(simulateCampaign);
   const scorePersonaFn = useServerFn(scorePersona);
+
+  useEffect(() => {
+    return () => {
+      if (deleteUndoTimeoutRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(deleteUndoTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const goTo = (n: number) => {
     setScreen(n);
@@ -246,8 +258,39 @@ export default function CampaignSimulator() {
     }
   };
 
-  const removeCustomPersona = (idx: number) =>
-    setCustomPersonas((prev) => prev.filter((_, i) => i !== idx));
+  const removeCustomPersona = (idx: number) => {
+    setCustomPersonas((prev) => {
+      const persona = prev[idx];
+      if (!persona) return prev;
+      setRecentlyDeletedPersona({ persona, index: idx });
+      return prev.filter((_, i) => i !== idx);
+    });
+    if (deleteUndoTimeoutRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(deleteUndoTimeoutRef.current);
+    }
+    if (typeof window !== "undefined") {
+      deleteUndoTimeoutRef.current = window.setTimeout(() => {
+        setRecentlyDeletedPersona(null);
+        deleteUndoTimeoutRef.current = null;
+      }, 6000);
+    }
+  };
+
+  const undoRemoveCustomPersona = () => {
+    if (!recentlyDeletedPersona) return;
+    const { persona, index } = recentlyDeletedPersona;
+    setCustomPersonas((prev) => {
+      const next = [...prev];
+      const clamped = Math.max(0, Math.min(index, next.length));
+      next.splice(clamped, 0, persona);
+      return next;
+    });
+    setRecentlyDeletedPersona(null);
+    if (deleteUndoTimeoutRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(deleteUndoTimeoutRef.current);
+      deleteUndoTimeoutRef.current = null;
+    }
+  };
 
   const navSteps: { label: string; screen: number }[] = [
     { label: "Launch",      screen: 1 },
@@ -431,8 +474,9 @@ export default function CampaignSimulator() {
                     {COMMENTS.map((c) => (
                       <div key={c.id} style={{
                         background: "rgba(255,255,255,.04)",
-                        borderLeft: c.type === "negative"
-                          ? `3px solid #FCA5A5`
+                        borderLeft:
+                          c.type === "negative" ? `3px solid #FCA5A5`
+                          : c.type === "positive" ? `3px solid #86EFAC`
                           : `2px solid rgba(255,255,255,.25)`,
                         borderRadius: "0 8px 8px 0", padding: "12px 14px",
                         transition: "all .4s",
@@ -932,6 +976,30 @@ export default function CampaignSimulator() {
           </div>
         )}
 
+        {recentlyDeletedPersona && (
+          <div style={{
+            position: "fixed", right: 20, bottom: 18, zIndex: 220,
+            background: C.surface, border: `1px solid ${C.line}`,
+            borderRadius: 10, padding: "10px 12px",
+            display: "flex", alignItems: "center", gap: 10,
+            boxShadow: "0 10px 30px rgba(0,0,0,.12)",
+          }}>
+            <span style={{ fontSize: 12, color: C.muted }}>
+              Removed custom persona
+            </span>
+            <button
+              onClick={undoRemoveCustomPersona}
+              style={{
+                background: C.ink, color: C.accentInk, border: "none",
+                borderRadius: 6, padding: "5px 10px",
+                fontFamily: F.body, fontSize: 12, fontWeight: 600, cursor: "pointer",
+              }}
+            >
+              Undo
+            </button>
+          </div>
+        )}
+
         </div>
       </div>
     </div>
@@ -1173,15 +1241,282 @@ function FocusGroupScreen({
   onGoSimulate: () => void;
   onGoResults: () => void;
 }) {
+  type PersonaGroup = {
+    id: string;
+    label: string;
+    summary: string;
+    traits: string[];
+    baseSentiment: number;
+    count: number;
+    custom: boolean;
+    sourceCustomIdx: number;
+  };
+  type GeneratedEntry = { persona: Persona; custom: boolean; customIdx: number };
+
+  const [phase, setPhase] = useState<"setup" | "results">("setup");
   const [tab, setTab] = useState<"conclusion" | "personas" | "transcript">("conclusion");
+  const [feedbackDepth, setFeedbackDepth] = useState<"quick" | "in-depth">("in-depth");
+  const [audienceDiversity, setAudienceDiversity] = useState<"low" | "medium" | "high">("high");
+  const [critiqueRigour, setCritiqueRigour] = useState<"light" | "balanced" | "harsh">("balanced");
+  const [groups, setGroups] = useState<PersonaGroup[]>([]);
+  const [generatedPanel, setGeneratedPanel] = useState<GeneratedEntry[]>([]);
 
-  const allPersonas: Array<{ persona: Persona; custom: boolean; customIdx: number }> = useMemo(() => [
-    ...(simResult?.personas ?? []).map((p) => ({ persona: p, custom: false, customIdx: -1 })),
-    ...customPersonas.map((p, i) => ({ persona: p, custom: true, customIdx: i })),
-  ], [simResult, customPersonas]);
+  const [showAddGroup, setShowAddGroup] = useState(false);
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
+  const [groupNameDraft, setGroupNameDraft] = useState("");
+  const [groupSummaryDraft, setGroupSummaryDraft] = useState("");
+  const [groupTraitsDraft, setGroupTraitsDraft] = useState("");
 
-  const transcript = useMemo(() => buildTranscript(allPersonas.map((x) => x.persona)), [allPersonas]);
-  const avg = simResult ? avgSentiment(simResult.personas, customPersonas) : 0;
+  const baseGroups = useMemo<PersonaGroup[]>(() => {
+    if (!simResult) return [];
+    const fromSegments = simResult.segments.map((s, i) => ({
+      id: `seg-${i}-${s.name}`,
+      label: s.name,
+      summary: s.topReaction,
+      traits: [sentimentLabel(s.sentimentPct), "Opinionated", "Socially vocal"],
+      baseSentiment: s.sentimentPct,
+      count: 2,
+      custom: false,
+      sourceCustomIdx: -1,
+    }));
+    const fromCustom = customPersonas.map((p, i) => ({
+      id: `custom-${i}-${p.name}`,
+      label: p.name,
+      summary: p.quote,
+      traits: p.traits?.length ? p.traits : ["Targeted", "Specific", "Niche"],
+      baseSentiment: p.sentiment,
+      count: 1,
+      custom: true,
+      sourceCustomIdx: i,
+    }));
+    return [...fromSegments, ...fromCustom];
+  }, [simResult, customPersonas]);
+
+  useEffect(() => {
+    if (!simResult) {
+      setGroups([]);
+      setGeneratedPanel([]);
+      return;
+    }
+    setGroups((prev) => {
+      const prevMap = new Map(prev.map((g) => [g.id, g]));
+      return baseGroups.map((g) => {
+        const p = prevMap.get(g.id);
+        return p ? { ...g, count: p.count } : g;
+      });
+    });
+  }, [baseGroups, simResult]);
+
+  useEffect(() => {
+    if (feedbackDepth === "quick" && tab === "transcript") {
+      setTab("conclusion");
+    }
+  }, [feedbackDepth, tab]);
+
+  const transcript = useMemo(() => {
+    if (feedbackDepth === "quick") return [];
+    return buildTranscript(generatedPanel.map((x) => x.persona));
+  }, [generatedPanel, feedbackDepth]);
+  const tabOptions: Array<["conclusion" | "personas" | "transcript", string]> = [
+    ["conclusion", "Conclusion"],
+    ["personas", "Personas"],
+    ...(feedbackDepth === "in-depth" ? ([["transcript", "Transcript"]] as Array<["transcript", string]>) : []),
+  ];
+  const avg = generatedPanel.length
+    ? Math.round(generatedPanel.reduce((s, x) => s + x.persona.sentiment, 0) / generatedPanel.length)
+    : simResult
+      ? avgSentiment(simResult.personas, customPersonas)
+      : 0;
+  const totalParticipants = groups.reduce((sum, g) => sum + g.count, 0);
+  const activeGroup = activeGroupId ? groups.find((g) => g.id === activeGroupId) ?? null : null;
+
+  const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
+  const harshnessDelta = critiqueRigour === "harsh" ? -14 : critiqueRigour === "light" ? 8 : 0;
+  const diversityRange = audienceDiversity === "high" ? 18 : audienceDiversity === "medium" ? 10 : 5;
+  const firstNames = ["Avery", "Jordan", "Maya", "Noah", "Zoe", "Liam", "Priya", "Marcus", "Elena", "Owen", "Devon", "Riley"];
+  const lastNames = ["Chen", "Patel", "Webb", "Park", "Reyes", "Nair", "Hughes", "Kim", "Lopez", "Grant", "Shaw", "Bennett"];
+  const quoteOpeners = [
+    "From my perspective,",
+    "Honestly,",
+    "As a buyer,",
+    "If I'm in the target audience,",
+    "My immediate reaction is",
+  ];
+
+  const updateGroupCount = (id: string, next: number) => {
+    setGroups((prev) => prev.map((g) => (g.id === id ? { ...g, count: Math.max(0, Math.min(6, next)) } : g)));
+  };
+
+  const addCustomGroup = () => {
+    const name = groupNameDraft.trim();
+    const summary = groupSummaryDraft.trim();
+    if (!name) return;
+    const parsedTraits = groupTraitsDraft
+      .split(",")
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .slice(0, 3);
+    setGroups((prev) => [...prev, {
+      id: `manual-${Date.now()}`,
+      label: name,
+      summary: summary || "Custom audience group added by user.",
+      traits: parsedTraits.length ? parsedTraits : ["Niche", "Specific", "Opinionated"],
+      baseSentiment: 50,
+      count: 1,
+      custom: true,
+      sourceCustomIdx: -1,
+    }]);
+    setGroupNameDraft("");
+    setGroupSummaryDraft("");
+    setGroupTraitsDraft("");
+    setShowAddGroup(false);
+  };
+
+  const closeAddGroupModal = () => {
+    setShowAddGroup(false);
+    setGroupNameDraft("");
+    setGroupSummaryDraft("");
+    setGroupTraitsDraft("");
+  };
+
+  const buildGroupParticipantPreview = (group: PersonaGroup) => {
+    const total = Math.max(1, group.count);
+    const rows: Array<{ name: string; sentiment: number; concern: string; channel: string }> = [];
+    const concerns = [
+      "Needs clearer proof points",
+      "Wants practical value, not broad claims",
+      "Cares about tone and brand credibility",
+      "Sensitive to price-performance tradeoffs",
+      "Quick to call out inauthentic messaging",
+    ];
+    const channels = ["TikTok", "Instagram", "YouTube", "Reddit", "X / Twitter"];
+    for (let i = 0; i < total; i += 1) {
+      const variance = ((i + 1) * 7) % (diversityRange * 2 + 1) - diversityRange;
+      const sentiment = clamp(Math.round(group.baseSentiment + harshnessDelta + variance));
+      const name = `${firstNames[(i + group.label.length) % firstNames.length]} ${lastNames[(i + group.label.length * 2) % lastNames.length]}`;
+      rows.push({
+        name,
+        sentiment,
+        concern: concerns[(i + group.traits.length) % concerns.length],
+        channel: channels[(i + group.label.length) % channels.length],
+      });
+    }
+    return rows;
+  };
+
+  const runFocusGroupAnalysis = () => {
+    const generated: GeneratedEntry[] = [];
+    let seed = 0;
+    groups.forEach((g, groupIdx) => {
+      for (let i = 0; i < g.count; i += 1) {
+        seed += 1;
+        const variance = ((groupIdx + 1) * 7 + (i + 2) * 5 + seed * 3) % (diversityRange * 2 + 1) - diversityRange;
+        const sentiment = clamp(Math.round(g.baseSentiment + harshnessDelta + variance));
+        const fname = firstNames[(groupIdx * 3 + i + seed) % firstNames.length];
+        const lname = lastNames[(groupIdx * 5 + i + seed) % lastNames.length];
+        const quote = `${quoteOpeners[(groupIdx + i + seed) % quoteOpeners.length]} ${g.summary.replace(/^"+|"+$/g, "")}`.slice(0, 155);
+        generated.push({
+          persona: {
+            name: `${fname} ${lname}`,
+            archetype: `${g.label} participant`,
+            age: sentiment >= 65 ? "Gen Z / Millennials" : sentiment >= 40 ? "Mixed adult audience" : "Mixed audience, skeptical segment",
+            job: g.label,
+            traits: g.traits.slice(0, 3),
+            sentiment,
+            quote,
+          },
+          custom: g.custom,
+          customIdx: g.sourceCustomIdx,
+        });
+      }
+    });
+    setGeneratedPanel(generated);
+    setTab("conclusion");
+    setPhase("results");
+  };
+
+  const exportFocusGroupAnalysis = () => {
+    if (!simResult || phase !== "results") return;
+    const lines: string[] = [];
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+
+    lines.push("# Focus Group Analysis");
+    lines.push("");
+    lines.push(`Generated: ${now.toLocaleString()}`);
+    lines.push("");
+    lines.push("## Configuration");
+    lines.push(`- Feedback depth: ${feedbackDepth === "in-depth" ? "In-depth discussion" : "Quick reactions"}`);
+    lines.push(`- Audience diversity: ${audienceDiversity}`);
+    lines.push(`- Critique rigour: ${critiqueRigour}`);
+    lines.push("");
+
+    lines.push("## Persona Groups");
+    groups.forEach((g, i) => {
+      lines.push(`${i + 1}. **${g.label}**`);
+      lines.push(`   - Participants: ${g.count}`);
+      lines.push(`   - Traits: ${g.traits.join(", ") || "—"}`);
+      lines.push(`   - Summary: ${g.summary}`);
+    });
+    lines.push("");
+
+    lines.push("## Summary");
+    lines.push(`- Mood: ${sentimentLabel(avg)}`);
+    lines.push(`- Participants generated: ${generatedPanel.length}`);
+    lines.push(`- Exchanges: ${feedbackDepth === "in-depth" ? transcript.length : 0}`);
+    lines.push(`- Risk band: ${simResult.risk}`);
+    lines.push(`- Tones: ${simResult.tones.join(", ")}`);
+    lines.push("");
+
+    lines.push("## Conclusion");
+    const pushSection = (title: string, items: string[]) => {
+      if (!items.length) return;
+      lines.push(`### ${title}`);
+      items.forEach((x) => lines.push(`- ${x}`));
+      lines.push("");
+    };
+    pushSection("What Works", simResult.insights.whatWorks);
+    pushSection("What Doesn't", simResult.insights.whatDoesnt);
+    pushSection("Opportunities", simResult.insights.opportunities);
+    pushSection("Suggested Tweaks", simResult.insights.suggestedTweaks);
+    if (simResult.insights.predictedPerformance) {
+      lines.push("### Predicted Performance");
+      lines.push(simResult.insights.predictedPerformance);
+      lines.push("");
+    }
+
+    lines.push("## Personas");
+    generatedPanel.forEach(({ persona, custom }, i) => {
+      lines.push(`### ${i + 1}. ${persona.name}${custom ? " (custom group)" : ""}`);
+      lines.push(`- Archetype: ${persona.archetype}`);
+      lines.push(`- Age: ${persona.age}`);
+      lines.push(`- Group / Job: ${persona.job || "—"}`);
+      lines.push(`- Traits: ${persona.traits.join(", ") || "—"}`);
+      lines.push(`- Sentiment: ${persona.sentiment} (${sentimentLabel(persona.sentiment)})`);
+      lines.push(`- Quote: "${persona.quote}"`);
+      lines.push("");
+    });
+
+    if (feedbackDepth === "in-depth" && transcript.length > 0) {
+      lines.push("## Transcript");
+      transcript.forEach((line, i) => {
+        lines.push(`${i + 1}. ${line.speaker}: ${line.text}`);
+      });
+      lines.push("");
+    }
+
+    const content = lines.join("\n");
+    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `focus-group-analysis_${stamp}.md`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
@@ -1198,6 +1533,238 @@ function FocusGroupScreen({
           <EmptyState onAction={onGoSimulate} />
         ) : (
           <>
+            {phase === "setup" && (
+              <div style={{ display: "grid", gap: 18, marginBottom: 20 }}>
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, marginBottom: 14 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                      Persona Group Setup
+                    </div>
+                    <div style={{ fontFamily: F.display, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", color: C.ink }}>
+                      {totalParticipants} participants total
+                    </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+                    {groups.map((g) => (
+                      <div
+                        key={g.id}
+                        onClick={() => setActiveGroupId(g.id)}
+                        style={{
+                          background: C.bg, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14,
+                          cursor: "pointer",
+                        }}
+                      >
+                        <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 6 }}>{g.label}</div>
+                        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8, fontStyle: "italic" }}>"{g.summary}"</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
+                          {g.traits.slice(0, 3).map((t) => (
+                            <span key={t} style={{ padding: "2px 8px", borderRadius: 999, fontFamily: F.mono, fontSize: 10, background: C.lineSoft, color: C.ink2 }}>{t}</span>
+                          ))}
+                        </div>
+                        <div style={{ borderTop: `1px solid ${C.lineSoft}`, paddingTop: 10, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: ".08em" }}>Participants</span>
+                          <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                            <button onClick={(e) => { e.stopPropagation(); updateGroupCount(g.id, g.count - 1); }} style={{ width: 22, height: 22, borderRadius: 6, border: `1px solid ${C.line}`, background: "#fff", cursor: "pointer" }}>−</button>
+                            <span style={{ minWidth: 16, textAlign: "center", fontFamily: F.mono, fontSize: 12, fontWeight: 700 }}>{g.count}</span>
+                            <button onClick={(e) => { e.stopPropagation(); updateGroupCount(g.id, g.count + 1); }} style={{ width: 22, height: 22, borderRadius: 6, border: `1px solid ${C.line}`, background: "#fff", cursor: "pointer" }}>+</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div style={{ marginTop: 12 }}>
+                    <button
+                      onClick={() => setShowAddGroup(true)}
+                      style={{
+                        width: "100%", border: `1px dashed ${C.line}`, background: C.bg, color: C.ink,
+                        borderRadius: 10, padding: "14px 12px", fontFamily: F.body, fontSize: 14, fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      + Add custom audience group
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 10 }}>
+                      Audience Diversity
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                      {(["low", "medium", "high"] as const).map((v) => (
+                        <button key={v} onClick={() => setAudienceDiversity(v)} style={{
+                          padding: "8px 0", borderRadius: 8, cursor: "pointer",
+                          border: `1px solid ${audienceDiversity === v ? C.ink : C.line}`,
+                          background: audienceDiversity === v ? C.ink : "transparent",
+                          color: audienceDiversity === v ? C.accentInk : C.muted, fontWeight: 600,
+                        }}>{v[0].toUpperCase() + v.slice(1)}</button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+                      Controls how different participants are, even inside the same persona group.
+                    </div>
+                  </div>
+
+                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 10 }}>
+                      Critique Rigour
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                      {([
+                        ["light", "Supportive"],
+                        ["balanced", "Balanced"],
+                        ["harsh", "Harsh"],
+                      ] as const).map(([v, label]) => (
+                        <button key={v} onClick={() => setCritiqueRigour(v)} style={{
+                          padding: "8px 0", borderRadius: 8, cursor: "pointer",
+                          border: `1px solid ${critiqueRigour === v ? C.ink : C.line}`,
+                          background: critiqueRigour === v ? C.ink : "transparent",
+                          color: critiqueRigour === v ? C.accentInk : C.muted, fontWeight: 600,
+                        }}>{label}</button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+                      Scale for how rigorous participants will critique the campaign.
+                    </div>
+                  </div>
+
+                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 10 }}>
+                      Feedback Depth
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      {([
+                        ["quick", "Quick reactions"],
+                        ["in-depth", "In-depth discussion"],
+                      ] as const).map(([v, label]) => (
+                        <button key={v} onClick={() => setFeedbackDepth(v)} style={{
+                          padding: "8px 0", borderRadius: 8, cursor: "pointer",
+                          border: `1px solid ${feedbackDepth === v ? C.ink : C.line}`,
+                          background: feedbackDepth === v ? C.ink : "transparent",
+                          color: feedbackDepth === v ? C.accentInk : C.muted, fontWeight: 600,
+                        }}>{label}</button>
+                      ))}
+                    </div>
+                    <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+                      In-depth enables Transcript tab. Quick keeps Conclusion + Personas only.
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button onClick={runFocusGroupAnalysis} style={{ ...primaryBtnStyle(), padding: "12px 20px" }}>
+                    Run Focus Group Analysis →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {phase === "setup" && showAddGroup && (
+              <div
+                onClick={closeAddGroupModal}
+                style={{
+                  position: "fixed", inset: 0, zIndex: 230,
+                  background: "rgba(10,10,10,.45)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 20,
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: "min(720px, 100%)",
+                    background: C.surface, border: `1px solid ${C.line}`,
+                    borderRadius: 14, padding: 22, display: "grid", gap: 10,
+                    boxShadow: "0 20px 60px rgba(0,0,0,.2)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                      Add Custom Audience Group
+                    </div>
+                    <button onClick={closeAddGroupModal} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 16 }}>✕</button>
+                  </div>
+                  <input value={groupNameDraft} onChange={(e) => setGroupNameDraft(e.target.value)} placeholder="Group name (e.g. Price-sensitive Gen Z commuters)" style={inputStyle(false)} />
+                  <textarea value={groupSummaryDraft} onChange={(e) => setGroupSummaryDraft(e.target.value)} rows={3} placeholder="How this group typically reacts..." style={inputStyle(false)} />
+                  <input value={groupTraitsDraft} onChange={(e) => setGroupTraitsDraft(e.target.value)} placeholder="Traits (comma separated, e.g. vocal, skeptical, trend-aware)" style={inputStyle(false)} />
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button onClick={closeAddGroupModal} style={{ background: "transparent", border: `1px solid ${C.line}`, color: C.muted, borderRadius: 8, padding: "8px 12px", cursor: "pointer" }}>Cancel</button>
+                    <button onClick={addCustomGroup} style={{ background: C.ink, color: C.accentInk, border: "none", borderRadius: 8, padding: "8px 14px", cursor: "pointer", fontWeight: 600 }}>Add group</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {phase === "setup" && activeGroup && (
+              <div
+                onClick={() => setActiveGroupId(null)}
+                style={{
+                  position: "fixed", inset: 0, zIndex: 230,
+                  background: "rgba(10,10,10,.45)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 20,
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: "min(860px, 100%)",
+                    background: C.surface, border: `1px solid ${C.line}`,
+                    borderRadius: 14, padding: 22,
+                    boxShadow: "0 20px 60px rgba(0,0,0,.2)",
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 12 }}>
+                    <div>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6 }}>
+                        Participant Details
+                      </div>
+                      <div style={{ fontFamily: F.display, fontSize: 24, fontWeight: 700, letterSpacing: "-0.01em" }}>{activeGroup.label}</div>
+                      <div style={{ fontSize: 13, color: C.muted, marginTop: 4, lineHeight: 1.5, maxWidth: 620 }}>
+                        {activeGroup.summary}
+                      </div>
+                    </div>
+                    <button onClick={() => setActiveGroupId(null)} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 16 }}>✕</button>
+                  </div>
+
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+                    {activeGroup.traits.map((t) => (
+                      <span key={t} style={{ padding: "3px 9px", borderRadius: 999, fontSize: 11, fontWeight: 600, background: C.lineSoft, color: C.ink2, fontFamily: F.mono }}>
+                        {t}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div style={{ background: C.bg, border: `1px solid ${C.line}`, borderRadius: 10, padding: 12, marginBottom: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8 }}>
+                      <span>Diversity</span><span>Rigour</span><span>Participants</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, fontSize: 13, color: C.ink }}>
+                      <span>{audienceDiversity[0].toUpperCase() + audienceDiversity.slice(1)}</span>
+                      <span>{critiqueRigour[0].toUpperCase() + critiqueRigour.slice(1)}</span>
+                      <span>{activeGroup.count}</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
+                    {buildGroupParticipantPreview(activeGroup).map((p, i) => (
+                      <div key={`${p.name}-${i}`} style={{ background: C.bg, border: `1px solid ${C.line}`, borderRadius: 10, padding: 12 }}>
+                        <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{p.name}</div>
+                        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>{p.concern}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>
+                          <span>{sentimentLabel(p.sentiment)}</span>
+                          <span>{p.channel}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {phase === "results" && (
+              <>
             {/* Summary bar */}
             <div style={{
               background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14,
@@ -1206,8 +1773,8 @@ function FocusGroupScreen({
             }}>
               <div style={{ display: "flex", gap: 28, flexShrink: 0 }}>
                 <SummaryStat label="Mood" val={sentimentLabel(avg)} tone={avg >= 60 ? "good" : avg >= 40 ? "warn" : "bad"} />
-                <SummaryStat label="Participants" val={`${allPersonas.length}`} />
-                <SummaryStat label="Exchanges" val={`${transcript.length}`} />
+                <SummaryStat label="Participants" val={`${generatedPanel.length}`} />
+                <SummaryStat label="Exchanges" val={feedbackDepth === "in-depth" ? `${transcript.length}` : "—"} />
                 <SummaryStat label="Risk band" val={simResult.risk} tone={simResult.risk === "LOW" ? "good" : simResult.risk === "MEDIUM" ? "warn" : "bad"} />
               </div>
               <div style={{ flex: 1 }} />
@@ -1219,7 +1786,19 @@ function FocusGroupScreen({
                   }}>{t}</span>
                 ))}
               </div>
-              <button onClick={onGoResults} style={primaryBtnStyle()}>Review & fix →</button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <button
+                  onClick={exportFocusGroupAnalysis}
+                  style={{
+                    background: C.surface, color: C.ink, border: `1px solid ${C.line}`,
+                    padding: "11px 14px", borderRadius: 8,
+                    fontFamily: F.body, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Export analysis
+                </button>
+                <button onClick={onGoResults} style={primaryBtnStyle()}>Review & fix →</button>
+              </div>
             </div>
 
             {/* Tabs */}
@@ -1227,11 +1806,7 @@ function FocusGroupScreen({
               display: "inline-flex", gap: 4, marginBottom: 18,
               background: C.lineSoft, borderRadius: 10, padding: 4,
             }}>
-              {([
-                ["conclusion", "Conclusion"],
-                ["personas",   "Personas"],
-                ["transcript", "Transcript"],
-              ] as const).map(([v, l]) => (
+              {tabOptions.map(([v, l]) => (
                 <button key={v} onClick={() => setTab(v)} style={{
                   padding: "7px 16px", borderRadius: 7, border: "none",
                   fontFamily: F.body, fontSize: 13, fontWeight: 600, cursor: "pointer",
@@ -1250,7 +1825,7 @@ function FocusGroupScreen({
               />
             )}
 
-            {tab === "transcript" && (
+            {feedbackDepth === "in-depth" && tab === "transcript" && (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 20, alignItems: "start" }}>
                 <div style={{
                   background: C.surface, border: `1px solid ${C.line}`,
@@ -1273,8 +1848,8 @@ function FocusGroupScreen({
                           </div>
                         );
                       }
-                      const idx = allPersonas.findIndex((x) => x.persona.name === line.speaker);
-                      const persona = idx >= 0 ? allPersonas[idx].persona : null;
+                      const idx = generatedPanel.findIndex((x) => x.persona.name === line.speaker);
+                      const persona = idx >= 0 ? generatedPanel[idx].persona : null;
                       const isLeft = idx % 2 === 0;
                       const initials = (line.speaker.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
                       return (
@@ -1311,7 +1886,7 @@ function FocusGroupScreen({
                 <aside style={{ position: "sticky", top: 76 }}>
                   <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>Panel</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {allPersonas.map(({ persona, custom, customIdx }, i) => {
+                    {generatedPanel.map(({ persona, custom, customIdx }, i) => {
                       const tone = persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad;
                       const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
                       return (
@@ -1368,7 +1943,7 @@ function FocusGroupScreen({
 
             {tab === "personas" && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-                {allPersonas.map(({ persona, custom, customIdx }, i) => (
+                {generatedPanel.map(({ persona, custom, customIdx }, i) => (
                   <FocusPersonaCard
                     key={`fp-${i}`}
                     persona={persona}
@@ -1378,6 +1953,8 @@ function FocusGroupScreen({
                   />
                 ))}
               </div>
+            )}
+              </>
             )}
           </>
         )}

@@ -7,6 +7,7 @@ export type CampaignPlan = {
   hashtag: string;
   slogan: string;
   targetAudience: string;
+  location: string;
   copy: string;
 };
 
@@ -78,7 +79,7 @@ export type SimulationResponse =
 
 const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign. You may rely on standard consumer-segmentation thinking internally, but NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers", "Experiencers", "Believers", "Makers", "Survivors") in any user-facing output field. Use plain English consumers would recognize.
 
-You will be given a structured campaign plan (name, timeline, key message, hashtag, slogan, target audience, and the actual ad copy). Critique it as if you had just shown it to three audience segments and aggregated their reactions. Be specific to the actual words — never generic feedback.
+You will be given a structured campaign plan (name, timeline, key message, hashtag, slogan, target audience, location/markets, and the actual ad copy). Use the location/markets to ground regional and cultural assumptions. Critique it as if you had just shown it to three audience segments and aggregated their reactions. Be specific to the actual words — never generic feedback.
 
 You MUST call the return_simulation tool. Rules:
 - segments: EXACTLY three audience CATEGORIES (NOT individual people) most relevant to the target audience. Each name is a broad consumer category phrased like "Gen Z Fashion Lovers", "Eco-Curious Millennial Parents", "Skeptical Gen X Professionals" — combine generation, lifestyle and mindset into a plain-English label. sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
@@ -93,7 +94,7 @@ You MUST call the return_simulation tool. Rules:
 - tones: 2–4 short adjectives describing the copy's emotional tone.
 - risk: LOW / MEDIUM / HIGH. riskScore 0–100 (0 safest, 100 most dangerous) — must agree with risk band: LOW 0–33, MEDIUM 34–66, HIGH 67–100.
 - riskRationale: one sentence.
-- flags: an array of any field-level problems in the plan. For each problem, set field to one of: name, timeline, keyMessage, hashtag, slogan, targetAudience, copy. severity low/medium/high. issue = short chip label (~6 words). suggestion = detailed fix advice for hover tooltip (~200 chars). fix = ready-to-paste replacement value for that field. Only flag fields that have real risks; skip fields that look fine. If the whole plan is safe, return an empty flags array.
+- flags: an array of any field-level problems in the plan. For each problem, set field to one of: name, timeline, keyMessage, hashtag, slogan, targetAudience, location, copy. severity low/medium/high. issue = short chip label (~6 words). suggestion = detailed fix advice for hover tooltip (~200 chars). fix = ready-to-paste replacement value for that field. Only flag fields that have real risks; skip fields that look fine. If the whole plan is safe, return an empty flags array.
 - improvedCopy: a fully rewritten version of the campaign copy that addresses every flag.
 - insights: an object summarizing the focus group's verdict in plain English. Treat each bullet as a short, high-signal observation (~140 chars max), not a full essay.
   • whatWorks: 2–4 bullet sentences highlighting what the campaign actually does well.
@@ -108,7 +109,7 @@ export const simulateCampaign = createServerFn({ method: "POST" })
       throw new Error("plan is required");
     }
     const p = data.plan;
-    const fields: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","copy"];
+    const fields: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","location","copy"];
     const clean = {} as CampaignPlan;
     for (const f of fields) {
       const v = typeof p[f] === "string" ? p[f].trim() : "";
@@ -132,6 +133,7 @@ Key Message: ${data.plan.keyMessage || "(blank)"}
 Hashtag: ${data.plan.hashtag || "(blank)"}
 Slogan: ${data.plan.slogan || "(blank)"}
 Target Audience: ${data.plan.targetAudience || "(blank)"}
+Location / Markets: ${data.plan.location || "(blank)"}
 
 Campaign Copy:
 ${data.plan.copy}`;
@@ -198,7 +200,7 @@ ${data.plan.copy}`;
                       items: {
                         type: "object",
                         properties: {
-                          field: { type: "string", enum: ["name","timeline","keyMessage","hashtag","slogan","targetAudience","copy"] },
+                          field: { type: "string", enum: ["name","timeline","keyMessage","hashtag","slogan","targetAudience","location","copy"] },
                           severity: { type: "string", enum: ["low","medium","high"] },
                           issue: { type: "string" },
                           suggestion: { type: "string" },
