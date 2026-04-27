@@ -108,33 +108,21 @@ const sanitizeNoCjkArray = (value: unknown, limit: number) =>
         .map((item) => sanitizeNoCjk(String(item ?? "")))
         .filter(Boolean)
     : [];
-const MODEL_CANDIDATES = ["openai/gpt-5", "google/gemini-3-flash-preview"] as const;
-async function fetchLovableWithFallback(
+const DEFAULT_LOVABLE_MODEL = "google/gemini-3-flash-preview" as const;
+async function fetchLovableDefault(
   apiKey: string,
   payload: Record<string, unknown>,
-): Promise<{ res: Response; model: string; body: string }> {
-  let lastRes: Response | null = null;
-  let lastBody = "";
-  let lastModel: string = MODEL_CANDIDATES[0];
-  for (const model of MODEL_CANDIDATES) {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ ...payload, model }),
-    });
-    if (res.ok) return { res, model, body: "" };
-    const body = await res.text().catch(() => "");
-    if (res.status === 402 || res.status === 429) return { res, model, body };
-    lastRes = res;
-    lastBody = body;
-    lastModel = model;
-    console.warn(`Model ${model} failed (${res.status}), trying fallback if available.`);
-  }
-  if (!lastRes) throw new Error("No model response received.");
-  return { res: lastRes, model: lastModel, body: lastBody };
+): Promise<{ res: Response; body: string }> {
+  const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ ...payload, model: DEFAULT_LOVABLE_MODEL }),
+  });
+  const body = res.ok ? "" : await res.text().catch(() => "");
+  return { res, body };
 }
 
 const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign. You may rely on standard consumer-segmentation thinking internally, but NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers", "Experiencers", "Believers", "Makers", "Survivors") in any user-facing output field. Use plain English consumers would recognize.
@@ -209,7 +197,7 @@ Campaign Copy:
 ${data.plan.copy}`;
 
     try {
-      const gateway = await fetchLovableWithFallback(apiKey, {
+      const gateway = await fetchLovableDefault(apiKey, {
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userMsg },
@@ -457,7 +445,7 @@ Campaign copy to react to:
 ${data.copy || "(no copy provided)"}`;
 
     try {
-      const gateway = await fetchLovableWithFallback(apiKey, {
+      const gateway = await fetchLovableDefault(apiKey, {
         messages: [
           { role: "system", content: PERSONA_SYSTEM },
           { role: "user", content: userMsg },
@@ -536,7 +524,7 @@ SOURCE TEXT:
 ${data.sourceText}`;
 
     try {
-      const gateway = await fetchLovableWithFallback(apiKey, {
+      const gateway = await fetchLovableDefault(apiKey, {
         messages: [
           { role: "system", content: PLAN_EXTRACT_SYSTEM },
           { role: "user", content: userMsg },
