@@ -285,16 +285,28 @@ export default function CampaignSimulator() {
   const importCampaignPlanFile = async (file: File) => {
     setImportPlanError(null);
     const name = file.name.toLowerCase();
-    const allowedExt = [".txt", ".md", ".csv", ".json", ".tsv", ".log"];
+    const allowedExt = [".txt", ".md", ".csv", ".json", ".tsv", ".log", ".xlsx"];
     const isAllowed = allowedExt.some((ext) => name.endsWith(ext));
     if (!isAllowed) {
-      setImportPlanError("Unsupported file type. Upload a text-based file (.txt, .md, .csv, .json, .tsv).");
+      setImportPlanError("Unsupported file type. Upload .txt, .md, .csv, .json, .tsv, .log, or .xlsx.");
       return;
     }
 
     setImportingPlan(true);
     try {
-      const raw = await file.text();
+      let raw = "";
+      if (name.endsWith(".xlsx")) {
+        const XLSX = await import("xlsx");
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        raw = workbook.SheetNames.map((sheetName) => {
+          const sheet = workbook.Sheets[sheetName];
+          const csv = XLSX.utils.sheet_to_csv(sheet);
+          return `Sheet: ${sheetName}\n${csv}`.trim();
+        }).join("\n\n");
+      } else {
+        raw = await file.text();
+      }
       if (!raw.trim()) {
         setImportPlanError("Uploaded file is empty.");
         return;
@@ -1209,7 +1221,7 @@ function CampaignFormCard({
         <input
           id={uploadInputId}
           type="file"
-          accept=".txt,.md,.csv,.json,.tsv,.log,text/plain,text/csv,application/json"
+          accept=".txt,.md,.csv,.json,.tsv,.log,.xlsx,text/plain,text/csv,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
           onChange={async (e) => {
             const file = e.target.files?.[0];
             if (file) await onImportFile(file);
@@ -1220,7 +1232,7 @@ function CampaignFormCard({
         />
       </div>
       <div style={{ fontSize: 11, color: C.faint, marginBottom: 16 }}>
-        Upload campaign notes or briefs in text format and AI will extract fields automatically.
+        Upload campaign notes/briefs (.txt/.md/.csv/.json/.tsv/.log/.xlsx) and AI will extract fields automatically.
       </div>
       {importError && (
         <div style={{
