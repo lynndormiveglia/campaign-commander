@@ -394,6 +394,9 @@ export default function CampaignSimulator() {
     { label: "Focus Group", screen: 4 },
     { label: "About",       screen: 6 },
   ];
+  const hasHighlyRiskyScore = !!simResult && (
+    simResult.riskScore < 60 || simResult.segments.some((segment) => segment.sentimentPct < 60)
+  );
 
   return (
     <div style={{ fontFamily: F.body, background: C.bg, minHeight: "100vh", color: C.ink }}>
@@ -457,6 +460,21 @@ export default function CampaignSimulator() {
         .ciq-carousel-mask::before,.ciq-carousel-mask::after{content:"";position:absolute;top:0;bottom:0;width:80px;pointer-events:none;z-index:2}
         .ciq-carousel-mask::before{left:0;background:linear-gradient(90deg,${C.bg} 0%,${C.bg} 18%,rgba(250,250,249,0) 100%)}
         .ciq-carousel-mask::after{right:0;background:linear-gradient(270deg,${C.bg} 0%,${C.bg} 18%,rgba(250,250,249,0) 100%)}
+        .ciq .whyMattersGrid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+        .ciq .aboutMetricsGrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+        .ciq .trustBandGrid{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0}
+        @media (max-width: 860px){
+          .ciq .whyMattersGrid{grid-template-columns:1fr}
+          .ciq .aboutMetricsGrid{grid-template-columns:1fr 1fr}
+          .ciq .trustBandGrid{grid-template-columns:1fr 1fr}
+          .ciq .trustBandItem{border-right:none !important}
+        }
+        @media (max-width: 560px){
+          .ciq .aboutMetricsGrid{grid-template-columns:1fr}
+          .ciq .trustBandGrid{grid-template-columns:1fr}
+          .ciq .trustBandItem{border-right:none !important;border-top:1px solid ${C.line}}
+          .ciq .trustBandItem:first-child{border-top:none}
+        }
       `}</style>
 
       <div className="ciq">
@@ -712,10 +730,10 @@ export default function CampaignSimulator() {
                           </div>
                           <div style={{
                             fontFamily: F.display, fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em",
-                            color: simResult.risk === "LOW" ? C.good : simResult.risk === "MEDIUM" ? C.warn : C.bad,
+                            color: hasHighlyRiskyScore ? C.bad : (simResult.risk === "LOW" ? C.good : simResult.risk === "MEDIUM" ? C.warn : C.bad),
                             lineHeight: 1.1,
                           }}>
-                            {simResult.risk}
+                            {hasHighlyRiskyScore ? "HIGHLY RISKY" : simResult.risk}
                           </div>
                           <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
                             {riskBlurb(simResult.risk)}
@@ -725,6 +743,22 @@ export default function CampaignSimulator() {
                           <RiskMeter score={simResult.riskScore} compact />
                         </div>
                       </div>
+                      {hasHighlyRiskyScore && (
+                        <div style={{
+                          marginTop: 10,
+                          background: C.badSoft,
+                          border: `1px solid ${C.bad}`,
+                          borderRadius: 8,
+                          padding: "8px 10px",
+                          fontFamily: F.mono,
+                          fontSize: 11,
+                          letterSpacing: ".04em",
+                          color: C.bad,
+                          textTransform: "uppercase",
+                        }}>
+                          Notification: Campaign marked as highly risky (score below 60%).
+                        </div>
+                      )}
                       <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.lineSoft}` }}>
                         <p style={{ flex: 1, minWidth: 220, fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
                           {simResult.riskRationale}
@@ -1125,35 +1159,527 @@ export default function CampaignSimulator() {
         )}
 
         {/* =====================================================
-            SCREEN 6 — ABOUT (placeholder shell for project info & credits)
+            SCREEN 6 — ABOUT / WHY THIS MATTERS
            ===================================================== */}
-        {screen === 6 && (
+        {screen === 61 && (
           <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
-            <div style={{ maxWidth: 820, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
-              <div style={{ marginBottom: 30 }}>
-                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● ABOUT</div>
+            <div style={{ maxWidth: 1080, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+              <div style={{ marginBottom: 26 }}>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.ink2, letterSpacing: ".15em", marginBottom: 10, textTransform: "uppercase" }}>
+                  ● THE STRATEGIC CASE
+                </div>
                 <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
-                  About this project
+                  Why This Matters
                 </h2>
                 <p style={{ fontSize: 15, color: C.muted, maxWidth: 620, lineHeight: 1.55, margin: 0 }}>
-                  {/* TODO: short tagline / one-paragraph intro */}
+                  The market opportunity behind the demo.
                 </p>
               </div>
 
-              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-                {/* TODO: Project information section */}
-                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
-                  <SectionHeader>The project</SectionHeader>
-                  <div style={{ marginTop: 14, fontSize: 14, color: C.muted, lineHeight: 1.7 }}>
-                    {/* Add description, motivation, methodology, technologies, etc. here. */}
+              <div className="whyMattersGrid" style={{ marginBottom: 18 }}>
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    Who it's for
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                    <span style={{ fontFamily: F.body, fontSize: 12, color: C.ink2, background: C.lineSoft, border: `1px solid ${C.line}`, borderRadius: 999, padding: "6px 10px" }}>
+                      Brand Marketing Teams
+                    </span>
+                    <span style={{ fontFamily: F.body, fontSize: 12, color: C.ink2, background: C.lineSoft, border: `1px solid ${C.line}`, borderRadius: 999, padding: "6px 10px" }}>
+                      PR & Communications Agencies
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.65, margin: 0 }}>
+                    Traditional focus groups are essential for understanding whether a message resonates - but they're expensive, slow, and difficult to organize. Teams are forced to choose between costly research and fast decision-making. CampaignIQ removes that tradeoff with instant audience simulation, so teams can validate, refine, and launch with confidence.
+                  </p>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    How it makes money
+                  </div>
+                  <div style={{ fontFamily: F.display, fontSize: 26, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 14 }}>
+                    Self-serve SaaS
+                  </div>
+                  <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, alignItems: "start" }}>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: "18px" }}>◦</span>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>Free tier - Limited simulations, single audience segment</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, alignItems: "start" }}>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: "18px" }}>◦</span>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>Pro ($49/mo) - Advanced segmentation, custom audiences, expanded analytics</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, alignItems: "start" }}>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: "18px" }}>◦</span>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>Enterprise - Custom modeling, SSO, dedicated success manager</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.5 }}>
+                    Comparable category positioning to Qualtrics and Kantar, but AI-native.
                   </div>
                 </div>
 
-                {/* TODO: Credits section */}
-                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
-                  <SectionHeader>Credits</SectionHeader>
-                  <div style={{ marginTop: 14, fontSize: 14, color: C.muted, lineHeight: 1.7 }}>
-                    {/* Add team members, advisors, citations, acknowledgments, etc. here. */}
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    How we're different
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.65, margin: "0 0 12px" }}>
+                    Survey platforms and social-listening tools rely on real respondents - slower, more expensive, and limited in predictive capability. We model behavior before the campaign goes live.
+                  </p>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {[
+                      "Simulates behavioral and emotional reactions from real-campaign patterns",
+                      "Instant iteration across unlimited campaign variations",
+                      "Models group dynamics, not just individual responses",
+                      "Designed for creative teams, not researchers",
+                    ].map((item) => (
+                      <div key={item} style={{ display: "grid", gridTemplateColumns: "16px 1fr", gap: 8, alignItems: "start" }}>
+                        <span style={{ color: C.good, fontSize: 12, lineHeight: "18px" }}>✓</span>
+                        <span style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    Roadmap
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "88px 1fr", gap: 10, alignItems: "start" }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>Q3 2026</div>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.55 }}><strong>Vertical models</strong> Tailored simulations for Fashion, Travel, and CPG</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "88px 1fr", gap: 10, alignItems: "start" }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>Q4 2026</div>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.55 }}><strong>Influencer campaign simulation</strong> Predict performance, audience reach, and revenue impact</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "88px 1fr", gap: 10, alignItems: "start" }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>2027</div>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.55 }}><strong>Ad platform integrations</strong> Meta Ads and Google Ads pre-launch simulation directly inside the campaign builder</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: C.lineSoft,
+                  borderTop: `1px solid ${C.line}`,
+                  borderRadius: 12,
+                  minHeight: 80,
+                  padding: "16px 14px",
+                }}
+              >
+                <div className="trustBandGrid">
+                  {[
+                    "AI-generated audiences - clearly labeled, never real people",
+                    "Predictive, not prescriptive - supports human judgment, doesn't replace it",
+                    "No personal data required - anonymized inputs only",
+                    "Bias-aware modeling - diverse, representative audience design",
+                  ].map((item, idx) => (
+                    <div
+                      key={item}
+                      className="trustBandItem"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "6px 12px",
+                        borderRight: idx < 3 ? `1px solid ${C.line}` : "none",
+                      }}
+                    >
+                      <span style={{ fontSize: 12, color: C.muted }}>•</span>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.4 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            SCREEN 6B — ABOUT / HOW IT WORKS
+           ===================================================== */}
+        {screen === 6 && (
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            <div style={{ maxWidth: 1080, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+              <div style={{ marginBottom: 26 }}>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: "#2563EB", letterSpacing: ".15em", marginBottom: 10, textTransform: "uppercase" }}>
+                  HOW CAMPAIGNIQ WORKS
+                </div>
+                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
+                  From campaign brief to synthetic audience insight
+                </h2>
+                <p style={{ fontSize: 15, color: C.muted, maxWidth: 620, lineHeight: 1.55, margin: 0 }}>
+                  CampaignIQ combines structured audience inputs with staged language-model generation to simulate likely audience reactions before launch.
+                </p>
+              </div>
+
+              <div className="whyMattersGrid">
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    Inputs
+                  </div>
+                  <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    {["Campaign brief", "Simulation settings", "Audience demographics", "Psychographics"].map((item) => (
+                      <div key={item} style={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 8, alignItems: "start" }}>
+                        <span style={{ fontSize: 11, color: C.muted, lineHeight: "18px" }}>•</span>
+                        <span style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: 0 }}>
+                    These inputs define who is in the room, how they think, and how the simulation should run.
+                  </p>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    AI Pipeline
+                  </div>
+                  <div style={{ display: "grid", gap: 12, marginBottom: 12 }}>
+                    {[
+                      ["1.", "Campaign insight extraction", "Summarize what resonates, what feels off, and what should be revised."],
+                      ["2.", "Persona generation", "Create synthetic audience members based on selected traits."],
+                      ["3.", "Group discussion simulation", "Generate reactions, agreements, disagreements, and objections."],
+                    ].map(([num, title, copy]) => (
+                      <div key={num} style={{ display: "grid", gridTemplateColumns: "20px 1fr", gap: 10, alignItems: "start" }}>
+                        <div style={{ fontFamily: F.mono, fontSize: 11, color: C.ink2, marginTop: 1 }}>{num}</div>
+                        <div>
+                          <div style={{ fontSize: 13, color: C.ink2, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>{copy}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: 0 }}>
+                    The system first creates personas, then simulates discussion, and finally turns that discussion into structured feedback.
+                  </p>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    Technical Theory
+                  </div>
+                  <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    {[
+                      "LLM + structured text parsing and data wrangling",
+                      "Structured prompting",
+                      "Prompt-chained generation across tabs (instead of one-click all-at-once generation)",
+                      "Social-science segmentation frameworks (VALS, Pew typologies, and generation cohorts)",
+                    ].map((item) => (
+                      <div key={item} style={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 8, alignItems: "start" }}>
+                        <span style={{ fontSize: 11, color: C.muted, lineHeight: "18px" }}>•</span>
+                        <span style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: 0 }}>
+                    Breaking the task into stages helps make outputs more grounded, consistent, and easier to interpret.
+                  </p>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    Build Stack
+                  </div>
+                  <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    {[
+                      "Vibe coding tools",
+                      "Front-end interface",
+                      "AI API / model service",
+                      "Rapid prototyping workflow",
+                    ].map((item) => (
+                      <div key={item} style={{ display: "grid", gridTemplateColumns: "14px 1fr", gap: 8, alignItems: "start" }}>
+                        <span style={{ fontSize: 11, color: C.muted, lineHeight: "18px" }}>•</span>
+                        <span style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: 0 }}>
+                    We used AI-assisted prototyping tools to build and iterate on the interface quickly while focusing on the core simulation experience.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            SCREEN 6BB — ABOUT / WHY THIS MATTERS
+           ===================================================== */}
+        {screen === 6 && (
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            <div style={{ maxWidth: 1080, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+              <div style={{ marginBottom: 26 }}>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.ink2, letterSpacing: ".15em", marginBottom: 10, textTransform: "uppercase" }}>
+                  ● THE STRATEGIC CASE
+                </div>
+                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
+                  Why This Matters
+                </h2>
+                <p style={{ fontSize: 15, color: C.muted, maxWidth: 620, lineHeight: 1.55, margin: 0 }}>
+                  The market opportunity behind the demo.
+                </p>
+              </div>
+
+              <div className="whyMattersGrid" style={{ marginBottom: 18 }}>
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    Who it's for
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+                    <span style={{ fontFamily: F.body, fontSize: 12, color: C.ink2, background: C.lineSoft, border: `1px solid ${C.line}`, borderRadius: 999, padding: "6px 10px" }}>
+                      Brand Marketing Teams
+                    </span>
+                    <span style={{ fontFamily: F.body, fontSize: 12, color: C.ink2, background: C.lineSoft, border: `1px solid ${C.line}`, borderRadius: 999, padding: "6px 10px" }}>
+                      PR & Communications Agencies
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.65, margin: 0 }}>
+                    Traditional focus groups are essential for understanding whether a message resonates - but they're expensive, slow, and difficult to organize. Teams are forced to choose between costly research and fast decision-making. CampaignIQ removes that tradeoff with instant audience simulation, so teams can validate, refine, and launch with confidence.
+                  </p>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    How it makes money
+                  </div>
+                  <div style={{ fontFamily: F.display, fontSize: 26, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 14 }}>
+                    Self-serve SaaS
+                  </div>
+                  <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, alignItems: "start" }}>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: "18px" }}>◦</span>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>Free tier - Limited simulations, single audience segment</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, alignItems: "start" }}>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: "18px" }}>◦</span>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>Pro ($49/mo) - Advanced segmentation, custom audiences, expanded analytics</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "18px 1fr", gap: 8, alignItems: "start" }}>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: "18px" }}>◦</span>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>Enterprise - Custom modeling, SSO, dedicated success manager</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.5 }}>
+                    Comparable category positioning to Qualtrics and Kantar, but AI-native.
+                  </div>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    How we're different
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.65, margin: "0 0 12px" }}>
+                    Survey platforms and social-listening tools rely on real respondents - slower, more expensive, and limited in predictive capability. We model behavior before the campaign goes live.
+                  </p>
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {[
+                      "Simulates behavioral and emotional reactions from real-campaign patterns",
+                      "Instant iteration across unlimited campaign variations",
+                      "Models group dynamics, not just individual responses",
+                      "Designed for creative teams, not researchers",
+                    ].map((item) => (
+                      <div key={item} style={{ display: "grid", gridTemplateColumns: "16px 1fr", gap: 8, alignItems: "start" }}>
+                        <span style={{ color: C.good, fontSize: 12, lineHeight: "18px" }}>✓</span>
+                        <span style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    Roadmap
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "88px 1fr", gap: 10, alignItems: "start" }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>Q3 2026</div>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.55 }}><strong>Vertical models</strong> Tailored simulations for Fashion, Travel, and CPG</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "88px 1fr", gap: 10, alignItems: "start" }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>Q4 2026</div>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.55 }}><strong>Influencer campaign simulation</strong> Predict performance, audience reach, and revenue impact</div>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "88px 1fr", gap: 10, alignItems: "start" }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>2027</div>
+                      <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.55 }}><strong>Ad platform integrations</strong> Meta Ads and Google Ads pre-launch simulation directly inside the campaign builder</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  background: C.lineSoft,
+                  borderTop: `1px solid ${C.line}`,
+                  borderRadius: 12,
+                  minHeight: 80,
+                  padding: "16px 14px",
+                }}
+              >
+                <div className="trustBandGrid">
+                  {[
+                    "AI-generated audiences - clearly labeled, never real people",
+                    "Predictive, not prescriptive - supports human judgment, doesn't replace it",
+                    "No personal data required - anonymized inputs only",
+                    "Bias-aware modeling - diverse, representative audience design",
+                  ].map((item, idx) => (
+                    <div
+                      key={item}
+                      className="trustBandItem"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "6px 12px",
+                        borderRight: idx < 3 ? `1px solid ${C.line}` : "none",
+                      }}
+                    >
+                      <span style={{ fontSize: 12, color: C.muted }}>•</span>
+                      <span style={{ fontSize: 12, color: C.muted, lineHeight: 1.4 }}>{item}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            SCREEN 6C — ABOUT / RISKS & GUARDRAILS
+           ===================================================== */}
+        {screen === 6 && (
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            <div style={{ maxWidth: 1080, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+              <div style={{ marginBottom: 26 }}>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: "#F59E0B", letterSpacing: ".15em", marginBottom: 10, textTransform: "uppercase", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span className="pulseBadge">●</span> HONEST LIMITATIONS
+                </div>
+                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
+                  Risks & Guardrails
+                </h2>
+                <p style={{ fontSize: 15, color: C.muted, maxWidth: 620, lineHeight: 1.55, margin: 0 }}>
+                  Where the system breaks, and how we contain it.
+                </p>
+              </div>
+
+              <div className="whyMattersGrid">
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderLeft: "4px solid #F59E0B", borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    Failure case - live
+                  </div>
+                  <div style={{ fontFamily: F.display, fontSize: 25, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 10 }}>
+                    We tried to break it. Here's what happened.
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: "0 0 12px" }}>
+                    We fed CampaignIQ a deliberately ambiguous campaign for a controversial product category. Here's the unedited output:
+                  </p>
+                  <div style={{ background: C.lineSoft, border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 5 }}>Input copy</div>
+                    <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>"Our new product is here. It's better than the rest. Buy now."</div>
+                  </div>
+                  <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 10 }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "92px 100px 1fr", gap: 10, padding: "8px 10px", background: C.lineSoft, borderBottom: `1px solid ${C.line}`, fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>
+                      <div>Segment</div><div>Sentiment</div><div>Issue</div>
+                    </div>
+                    {[
+                      ["Gen Z", "71% positive", "Hallucinated specifics - invented \"sustainability claims\" not in copy"],
+                      ["Parents", "68% positive", "Over-confident - vague copy shouldn't produce confident predictions"],
+                      ["Professionals", "64% positive", "Bias toward generic positivity when input lacks signal"],
+                    ].map(([segment, score, issue]) => (
+                      <div key={segment} style={{ display: "grid", gridTemplateColumns: "92px 100px 1fr", gap: 10, padding: "8px 10px", borderBottom: `1px solid ${C.line}` }}>
+                        <div style={{ fontSize: 13, color: C.ink2 }}>{segment}</div>
+                        <div style={{ fontSize: 13, color: C.ink2 }}>{score}</div>
+                        <div style={{ fontSize: 13, color: "#EF4444", lineHeight: 1.45 }}>{issue}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: 9, padding: "9px 10px", fontSize: 13, color: "#92400E", lineHeight: 1.5 }}>
+                    What this tells us: When given low-signal input, the model defaults to generic optimism rather than flagging insufficient information. This is a known failure mode we're actively working on.
+                  </div>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    Safeguards in place
+                  </div>
+                  <div style={{ fontFamily: F.display, fontSize: 25, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 12 }}>
+                    Four layers of protection
+                  </div>
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {[
+                      ["🛡️", "Input validation", "Minimum-length check, content moderation API, profanity and harmful-content filters before any input reaches the model."],
+                      ["📉", "Confidence thresholds", "If model confidence falls below 60%, the system returns \"insufficient signal\" instead of fabricated metrics."],
+                      ["🔁", "Fallback responses", "For ambiguous or out-of-domain inputs, the system surfaces a \"needs human review\" message rather than guessing."],
+                      ["👥", "Human-in-the-loop", "Enterprise tier includes optional human review of edge-case simulations before they're delivered to customers."],
+                    ].map(([icon, title, copy]) => (
+                      <div key={title} style={{ display: "grid", gridTemplateColumns: "22px 1fr", gap: 10, alignItems: "start" }}>
+                        <div style={{ fontSize: 14, lineHeight: "20px" }}>{icon}</div>
+                        <div>
+                          <div style={{ fontSize: 13, color: C.ink2, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.48 }}>{copy}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>
+                    What users know
+                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: "0 0 10px" }}>
+                    Users always know they're interacting with AI-generated audiences. Predictions are clearly labeled as predictive and directional - never presented as ground truth.
+                  </p>
+                  <div style={{ display: "grid", gap: 7, marginBottom: 10 }}>
+                    {[
+                      "Every output is labeled \"AI simulation, not real participants\"",
+                      "Confidence scores shown alongside every prediction",
+                      "No personal data required to run a simulation",
+                      "All inputs anonymized; no campaign content retained after session",
+                    ].map((item) => (
+                      <div key={item} style={{ display: "grid", gridTemplateColumns: "16px 1fr", gap: 8, alignItems: "start" }}>
+                        <span style={{ color: C.good, fontSize: 12, lineHeight: "18px" }}>✓</span>
+                        <span style={{ fontSize: 13, color: C.ink2, lineHeight: 1.45 }}>{item}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 12, color: C.faint, lineHeight: 1.45 }}>
+                    Our north star: a user should never be surprised by where the data came from or how it was generated.
+                  </div>
+                </div>
+
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
+                    How we'd measure quality
+                  </div>
+                  <div style={{ fontFamily: F.display, fontSize: 25, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 12 }}>
+                    Three loops, always running
+                  </div>
+                  <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+                    {[
+                      ["01", "Backtesting", "Run new model versions against the 120-campaign historical benchmark. Track sentiment correlation and backlash-detection accuracy over time."],
+                      ["02", "User feedback loop", "Every simulation includes a thumbs-up / thumbs-down - flagged outputs feed back into our evaluation set within 24 hours."],
+                      ["03", "Adversarial red-teaming", "Quarterly stress tests with deliberately ambiguous, biased, or out-of-distribution inputs. Failures trigger guardrail updates before the next release."],
+                    ].map(([num, title, copy]) => (
+                      <div key={num} style={{ display: "grid", gridTemplateColumns: "30px 1fr", gap: 10, alignItems: "start" }}>
+                        <div style={{ width: 30, height: 20, borderRadius: 999, background: C.lineSoft, color: C.ink2, fontFamily: F.mono, fontSize: 10, letterSpacing: ".06em", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          {num}
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 13, color: C.ink2, fontWeight: 600, marginBottom: 2 }}>{title}</div>
+                          <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.48 }}>{copy}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: "#EFF6FF", border: "1px solid #2563EB", borderRadius: 9, padding: "9px 10px", fontSize: 13, color: "#1E3A8A", lineHeight: 1.5 }}>
+                    At scale, we'd add: differential privacy auditing, third-party bias evaluation, and a public model card updated with each release.
                   </div>
                 </div>
               </div>
