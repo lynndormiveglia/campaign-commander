@@ -77,6 +77,10 @@ export type SimulationResponse =
   | { ok: true; data: SimulationResult }
   | { ok: false; error: string };
 
+export type PlanExtractResponse =
+  | { ok: true; plan: CampaignPlan }
+  | { ok: false; error: string };
+
 const CJK_CHAR_REGEX = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g;
 const sanitizeNoCjk = (value: string) => value.replace(CJK_CHAR_REGEX, "").replace(/\s{2,}/g, " ").trim();
 const sanitizeNoCjkArray = (value: unknown, limit: number) =>
@@ -339,6 +343,26 @@ You MUST call the return_persona tool with:
 - sentiment: integer 0–100 (the group's predicted positive sentiment toward the campaign copy).
 - quote: ~120 chars in this group's collective voice reacting to the copy. Phrase it as if a representative member of the group is speaking ("we" or first-person plural is fine).`;
 
+const PLAN_EXTRACT_SYSTEM = `You extract structured campaign-plan fields from unstructured text.
+
+Language constraint: output ONLY ASCII/Latin characters. Never output Chinese (Hanzi), Japanese, Korean, or any non-Latin script.
+
+You MUST call return_campaign_plan with these fields:
+- name
+- timeline
+- keyMessage
+- hashtag
+- slogan
+- targetAudience
+- location
+- copy
+
+Rules:
+- Keep output concise and practical.
+- If a field is missing in the source text, return an empty string for that field.
+- "copy" should capture the main campaign details/body text from the source.
+- Never invent factual claims not implied by the source text.`;
+
 export const scorePersona = createServerFn({ method: "POST" })
   .inputValidator((data: { description: string; copy: string }) => {
     if (!data) throw new Error("description is required");
@@ -414,6 +438,89 @@ ${data.copy || "(no copy provided)"}`;
       return { ok: true, persona };
     } catch (e) {
       console.error("scorePersona failed:", e);
+      return { ok: false, error: "Network error. Please try again." };
+    }
+  });
+
+export const extractCampaignPlanFromText = createServerFn({ method: "POST" })
+  .inputValidator((data: { sourceText: string; fileName?: string }) => {
+    const sourceText = String(data?.sourceText ?? "").trim();
+    if (sourceText.length < 20) throw new Error("Uploaded content is too short to parse.");
+    return {
+      sourceText: sourceText.slice(0, 20000),
+      fileName: String(data?.fileName ?? "").slice(0, 200),
+    };
+  })
+  .handler(async ({ data }): Promise<PlanExtractResponse> => {
+    const apiKey = process.env.LOVABLE_API_KEY;
+    if (!apiKey) return { ok: false, error: "AI is not configured. Please try again later." };
+
+    const userMsg = `Extract campaign fields from this uploaded content.
+File: ${data.fileName || "(unknown)"}
+
+SOURCE TEXT:
+${data.sourceText}`;
+
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "google/gemini-3-flash-preview",
+          messages: [
+            { role: "system", content: PLAN_EXTRACT_SYSTEM },
+            { role: "user", content: userMsg },
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "return_campaign_plan",
+              description: "Return extracted campaign plan fields.",
+              parameters: {
+                type: "object",
+                properties: {
+                  name: { type: "string" },
+                  timeline: { type: "string" },
+                  keyMessage: { type: "string" },
+                  hashtag: { type: "string" },
+                  slogan: { type: "string" },
+                  targetAudience: { type: "string" },
+                  location: { type: "string" },
+                  copy: { type: "string" },
+                },
+                required: ["name", "timeline", "keyMessage", "hashtag", "slogan", "targetAudience", "location", "copy"],
+                additionalProperties: false,
+              },
+            },
+          }],
+          tool_choice: { type: "function", function: { name: "return_campaign_plan" } },
+        }),
+      });
+
+      if (!res.ok) {
+        if (res.status === 429) return { ok: false, error: "Too many requests - try again in a moment." };
+        if (res.status === 402) return { ok: false, error: "AI credits exhausted." };
+        return { ok: false, error: "Couldn't analyze the uploaded file. Please try again." };
+      }
+
+      const json = await res.json();
+      const argsStr = json?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
+      if (!argsStr) return { ok: false, error: "Unexpected parser response. Try again." };
+      const raw = JSON.parse(argsStr) as Partial<CampaignPlan>;
+
+      const plan: CampaignPlan = {
+        name: sanitizeNoCjk(String(raw.name ?? "")),
+        timeline: sanitizeNoCjk(String(raw.timeline ?? "")),
+        keyMessage: sanitizeNoCjk(String(raw.keyMessage ?? "")),
+        hashtag: sanitizeNoCjk(String(raw.hashtag ?? "")),
+        slogan: sanitizeNoCjk(String(raw.slogan ?? "")),
+        targetAudience: sanitizeNoCjk(String(raw.targetAudience ?? "")),
+        location: sanitizeNoCjk(String(raw.location ?? "")),
+        copy: sanitizeNoCjk(String(raw.copy ?? "")),
+      };
+      return { ok: true, plan };
+    } catch (e) {
+      console.error("extractCampaignPlanFromText failed:", e);
       return { ok: false, error: "Network error. Please try again." };
     }
   });

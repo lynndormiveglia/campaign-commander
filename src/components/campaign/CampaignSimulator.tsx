@@ -3,6 +3,7 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   simulateCampaign,
   scorePersona,
+  extractCampaignPlanFromText,
   type SimulationResult,
   type SimulationSegment,
   type SimulationInsights,
@@ -62,9 +63,15 @@ const FIELD_META: Record<FieldKey, { label: string; placeholder: string; multili
   slogan:         { label: "Slogan",          placeholder: "A tighter, punchier line." },
   targetAudience: { label: "Target Audience", placeholder: "e.g. Trend-driven Gen Z and young millennial shoppers in US/UK", multiline: true, rows: 2 },
   location:       { label: "Location / Markets", placeholder: "e.g. United States, UK, urban Tier-1 cities" },
-  copy:           { label: "Campaign Copy",   placeholder: "The actual ad copy that audiences will see.", multiline: true, rows: 5 },
+  copy:           { label: "Campaign Details",   placeholder: "Provide detailed campaign context, copy, offers, channels, and claims audiences will see.", multiline: true, rows: 5 },
 };
 const FIELD_ORDER: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","location","copy"];
+const COUNTRY_OPTIONS = [
+  "United States", "United Kingdom", "China", "Canada", "Australia", "Japan", "South Korea",
+  "Singapore", "India", "Indonesia", "Malaysia", "Thailand", "Vietnam", "Philippines",
+  "Germany", "France", "Italy", "Spain", "Netherlands", "Sweden", "Norway", "Denmark",
+  "United Arab Emirates", "Saudi Arabia", "Mexico", "Brazil", "South Africa",
+] as const;
 
 const DEFAULT_PLAN: CampaignPlan = {
   name: "SHEIN Spring Micro-Drop 2026",
@@ -91,6 +98,15 @@ function useCountdown(start: number) {
   const s = secs % 60;
   return [h, m, s].map((n) => String(n).padStart(2, "0"));
 }
+
+const MIN_GENERATION_MS = 2000;
+const waitMs = (ms: number) => new Promise<void>((resolve) => {
+  if (typeof window === "undefined") {
+    resolve();
+    return;
+  }
+  window.setTimeout(resolve, ms);
+});
 
 const sevColor = (sev: FieldFlag["severity"]) =>
   sev === "high" ? C.bad : sev === "medium" ? C.warn : C.muted;
@@ -145,6 +161,8 @@ export default function CampaignSimulator() {
   const [simulating, setSimulating] = useState(false);
   const [simResult, setSimResult] = useState<SimulationResult | null>(null);
   const [simError, setSimError] = useState<string | null>(null);
+  const [importingPlan, setImportingPlan] = useState(false);
+  const [importPlanError, setImportPlanError] = useState<string | null>(null);
 
   const [appliedFixes, setAppliedFixes] = useState<Set<FieldKey>>(new Set());
   const [originalValues, setOriginalValues] = useState<Map<FieldKey, string>>(new Map());
@@ -153,6 +171,7 @@ export default function CampaignSimulator() {
   const countdown = useCountdown(23 * 3600 + 59 * 60);
   const simulateFn = useServerFn(simulateCampaign);
   const scorePersonaFn = useServerFn(scorePersona);
+  const extractPlanFn = useServerFn(extractCampaignPlanFromText);
 
   useEffect(() => {
     return () => {
@@ -186,7 +205,10 @@ export default function CampaignSimulator() {
     // — re-simulating shouldn't surface a new AI suggestion for it. The user can still
     // hit Undo to release the lock and let the next sim flag it again.
     try {
-      const response = await simulateFn({ data: { plan } });
+      const [response] = await Promise.all([
+        simulateFn({ data: { plan } }),
+        waitMs(MIN_GENERATION_MS),
+      ]);
       if (!response.ok) setSimError(response.error);
       else setSimResult(response.data);
     } catch (e) {
@@ -243,7 +265,10 @@ export default function CampaignSimulator() {
     setPersonaError(null);
     setScoringPersona(true);
     try {
-      const res = await scorePersonaFn({ data: { description: draftDescription, copy: plan.copy } });
+      const [res] = await Promise.all([
+        scorePersonaFn({ data: { description: draftDescription, copy: plan.copy } }),
+        waitMs(MIN_GENERATION_MS),
+      ]);
       if (!res.ok) {
         setPersonaError(res.error);
       } else {
@@ -255,6 +280,50 @@ export default function CampaignSimulator() {
       setPersonaError("Couldn't analyze persona. Please try again.");
     } finally {
       setScoringPersona(false);
+    }
+  };
+
+  const importCampaignPlanFile = async (file: File) => {
+    setImportPlanError(null);
+    const name = file.name.toLowerCase();
+    const allowedExt = [".txt", ".md", ".csv", ".json", ".tsv", ".log"];
+    const isAllowed = allowedExt.some((ext) => name.endsWith(ext));
+    if (!isAllowed) {
+      setImportPlanError("Unsupported file type. Upload a text-based file (.txt, .md, .csv, .json, .tsv).");
+      return;
+    }
+
+    setImportingPlan(true);
+    try {
+      const raw = await file.text();
+      if (!raw.trim()) {
+        setImportPlanError("Uploaded file is empty.");
+        return;
+      }
+      const [res] = await Promise.all([
+        extractPlanFn({ data: { sourceText: raw, fileName: file.name } }),
+        waitMs(MIN_GENERATION_MS),
+      ]);
+      if (!res.ok) {
+        setImportPlanError(res.error);
+        return;
+      }
+      const next = res.plan;
+      setPlan((prev) => ({
+        name: next.name || prev.name,
+        timeline: next.timeline || prev.timeline,
+        keyMessage: next.keyMessage || prev.keyMessage,
+        hashtag: next.hashtag || prev.hashtag,
+        slogan: next.slogan || prev.slogan,
+        targetAudience: next.targetAudience || prev.targetAudience,
+        location: next.location || prev.location,
+        copy: next.copy || prev.copy,
+      }));
+    } catch (e) {
+      console.error(e);
+      setImportPlanError("Couldn't read or analyze this file.");
+    } finally {
+      setImportingPlan(false);
     }
   };
 
@@ -330,6 +399,36 @@ export default function CampaignSimulator() {
         .ciq input:focus, .ciq textarea:focus, .ciq select:focus{outline:none; border-color:${C.ink} !important; background:#fff}
         .ciq button{transition:all .15s ease}
         .ciq button:hover:not(:disabled){transform:translateY(-1px)}
+        .ciq .rigourSlider{
+          -webkit-appearance:none; appearance:none; height:8px; border-radius:999px; outline:none;
+          background:linear-gradient(90deg,#111827 var(--fill,50%), #E7E5E4 var(--fill,50%));
+          transition:background .18s ease;
+        }
+        .ciq .rigourSlider::-webkit-slider-thumb{
+          -webkit-appearance:none; appearance:none; width:18px; height:18px; border-radius:999px;
+          background:#FFFFFF; border:2px solid #111827; box-shadow:0 2px 8px rgba(0,0,0,.18);
+          transition:transform .15s ease, box-shadow .15s ease;
+        }
+        .ciq .rigourSlider:active::-webkit-slider-thumb{
+          transform:scale(1.06);
+          box-shadow:0 4px 12px rgba(0,0,0,.22);
+        }
+        .ciq .rigourSlider::-moz-range-track{
+          height:8px; border-radius:999px; background:#E7E5E4;
+        }
+        .ciq .rigourSlider::-moz-range-progress{
+          height:8px; border-radius:999px; background:#111827;
+        }
+        .ciq .rigourSlider::-moz-range-thumb{
+          width:18px; height:18px; border-radius:999px;
+          background:#FFFFFF; border:2px solid #111827; box-shadow:0 2px 8px rgba(0,0,0,.18);
+        }
+        .ciq .clickablePersonaCard{transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease}
+        .ciq .clickablePersonaCard:hover{
+          transform:translateY(-2px);
+          box-shadow:0 12px 24px rgba(15,23,42,.1);
+          border-color:#94A3B8 !important;
+        }
         .ciq-carousel-track{display:flex;gap:14px;transition:transform .45s cubic-bezier(.22,.61,.36,1)}
         .ciq-carousel-mask{position:relative;overflow:hidden;padding:0 18px}
         .ciq-carousel-mask::before,.ciq-carousel-mask::after{content:"";position:absolute;top:0;bottom:0;width:80px;pointer-events:none;z-index:2}
@@ -381,15 +480,6 @@ export default function CampaignSimulator() {
               padding: "20px 28px", textAlign: "center",
               maxWidth: 980, margin: "0 auto", width: "100%",
             }}>
-              <div style={{
-                display: "inline-flex", alignItems: "center", gap: 8,
-                fontFamily: F.mono, fontSize: 11, fontWeight: 500, color: C.muted,
-                background: C.surface, border: `1px solid ${C.line}`, borderRadius: 999,
-                padding: "5px 12px", marginBottom: 18, letterSpacing: ".04em",
-              }}>
-                <span style={{ width: 6, height: 6, background: C.bad, borderRadius: "50%", display: "inline-block", animation: "blink 1.4s ease-in-out infinite" }} />
-                LAUNCH WINDOW OPEN
-              </div>
               <h1 style={{
                 fontFamily: F.display, fontSize: "clamp(34px, 5vw, 56px)",
                 fontWeight: 700, lineHeight: 1.05, letterSpacing: "-0.03em",
@@ -418,7 +508,7 @@ export default function CampaignSimulator() {
                   padding: "4px 16px", fontFamily: F.body, fontSize: 14, fontWeight: 500,
                   cursor: "pointer", textDecoration: "underline", textUnderlineOffset: 4, textDecorationColor: C.faint,
                 }}>
-                  or simulate first →
+                  Or Simulate First →
                 </button>
 
                 <div style={{
@@ -447,7 +537,7 @@ export default function CampaignSimulator() {
                 fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".15em",
                 textTransform: "uppercase", textAlign: "center", marginBottom: 10,
               }}>
-                In your queue
+                In your history
               </div>
               <CampaignCarousel
                 items={SAMPLE_CAMPAIGNS}
@@ -508,7 +598,7 @@ export default function CampaignSimulator() {
                     padding: 16,
                     borderRadius: 10,
                     fontSize: 15,
-                  }}>See the cost of this mistake →</button>
+                  }}>See The Cost Of This Mistake →</button>
                 </div>
               </div>
             )}
@@ -581,6 +671,9 @@ export default function CampaignSimulator() {
                     onSimulate={runSimulation}
                     simulating={simulating}
                     error={simError}
+                    importingPlan={importingPlan}
+                    importError={importPlanError}
+                    onImportFile={importCampaignPlanFile}
                     ctaLabel="Simulate Audience Reaction"
                   />
 
@@ -629,7 +722,7 @@ export default function CampaignSimulator() {
                   {simResult && (
                     <div className="fadeIn" style={{ display: "flex", justifyContent: "flex-end" }}>
                       <button onClick={() => goTo(5)} style={progressBtnStyle()}>
-                        See how to improve →
+                        See How To Improve →
                       </button>
                     </div>
                   )}
@@ -683,12 +776,14 @@ export default function CampaignSimulator() {
                       <button
                         onClick={() => setHintsOpen((v) => !v)}
                         aria-expanded={hintsOpen}
+                        aria-label={hintsOpen ? "Hide hints" : "Show hints"}
+                        title={hintsOpen ? "Hide hints" : "Show hints"}
                         style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
+                          display: "inline-flex", alignItems: "center",
                           background: hintsOpen ? C.ink : "transparent",
                           color: hintsOpen ? C.accentInk : C.muted,
                           border: `1px solid ${hintsOpen ? C.ink : C.line}`,
-                          borderRadius: 999, padding: "3px 10px",
+                          borderRadius: 999, padding: "3px",
                           fontFamily: F.mono, fontSize: 10, fontWeight: 600,
                           letterSpacing: ".05em", cursor: "pointer",
                         }}>
@@ -698,7 +793,6 @@ export default function CampaignSimulator() {
                           display: "inline-flex", alignItems: "center", justifyContent: "center",
                           fontSize: 10, fontWeight: 700,
                         }}>?</span>
-                        {hintsOpen ? "HIDE HINTS" : "HINTS"}
                       </button>
                     </div>
                     <p style={{ fontSize: 11, color: C.faint, lineHeight: 1.5, marginBottom: 12 }}>
@@ -924,7 +1018,7 @@ export default function CampaignSimulator() {
 
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>
                       <button onClick={() => goTo(4)} style={progressBtnStyle()}>
-                        See your focus group →
+                        Start Focus Group Test →
                       </button>
                     </div>
                     </div>
@@ -1031,7 +1125,7 @@ export default function CampaignSimulator() {
 
         {recentlyDeletedPersonas.length > 0 && (
           <div style={{
-            position: "fixed", right: 20, bottom: 18, zIndex: 220,
+            position: "fixed", right: 20, bottom: 18, zIndex: 1220,
             background: C.surface, border: `1px solid ${C.line}`,
             borderRadius: 10, padding: "10px 12px",
             display: "flex", alignItems: "center", gap: 10,
@@ -1063,7 +1157,7 @@ export default function CampaignSimulator() {
    Reusable: Campaign form card (used by Simulate)
    =========================================================== */
 function CampaignFormCard({
-  plan, updateField, onSimulate, simulating, error, ctaLabel,
+  plan, updateField, onSimulate, simulating, error, ctaLabel, importingPlan, importError, onImportFile,
 }: {
   plan: CampaignPlan;
   updateField: (k: FieldKey, v: string) => void;
@@ -1071,12 +1165,55 @@ function CampaignFormCard({
   simulating: boolean;
   error: string | null;
   ctaLabel: string;
+  importingPlan: boolean;
+  importError: string | null;
+  onImportFile: (file: File) => Promise<void>;
 }) {
+  const [copyHintOpen, setCopyHintOpen] = useState(false);
+  const uploadInputId = "campaign-plan-upload-input";
   return (
     <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
-      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 20 }}>
-        Detailed Campaign Plan
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+        <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
+          Detailed Campaign Plan
+        </div>
+        <label
+          htmlFor={uploadInputId}
+          style={{
+            background: C.bg, border: `1px solid ${C.line}`, color: C.ink,
+            borderRadius: 8, padding: "7px 10px",
+            fontFamily: F.body, fontSize: 12, fontWeight: 600,
+            cursor: importingPlan ? "default" : "pointer",
+            opacity: importingPlan ? 0.6 : 1,
+          }}
+        >
+          {importingPlan ? "Analyzing file..." : "Upload file to autofill"}
+        </label>
+        <input
+          id={uploadInputId}
+          type="file"
+          accept=".txt,.md,.csv,.json,.tsv,.log,text/plain,text/csv,application/json"
+          onChange={async (e) => {
+            const file = e.target.files?.[0];
+            if (file) await onImportFile(file);
+            e.currentTarget.value = "";
+          }}
+          disabled={importingPlan}
+          style={{ display: "none" }}
+        />
       </div>
+      <div style={{ fontSize: 11, color: C.faint, marginBottom: 16 }}>
+        Upload campaign notes or briefs in text format and AI will extract fields automatically.
+      </div>
+      {importError && (
+        <div style={{
+          marginBottom: 14, background: C.surface, border: `1px solid ${C.line}`,
+          borderLeft: `3px solid ${C.bad}`, borderRadius: 8, padding: "9px 11px",
+          color: C.bad, fontSize: 12, lineHeight: 1.45,
+        }}>
+          {importError}
+        </div>
+      )}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
         {FIELD_ORDER.map((k) => {
           const meta = FIELD_META[k];
@@ -1089,8 +1226,33 @@ function CampaignFormCard({
                 fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".1em",
                 textTransform: "uppercase", marginBottom: 6,
               }}>
-                <span>{meta.label}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {meta.label}
+                  {k === "copy" && (
+                    <button
+                      type="button"
+                      onClick={() => setCopyHintOpen((v) => !v)}
+                      aria-label="Campaign details guidance"
+                      style={{
+                        width: 16, height: 16, borderRadius: 999,
+                        border: `1px solid ${C.line}`, background: C.bg, color: C.muted,
+                        fontFamily: F.mono, fontSize: 10, lineHeight: 1, cursor: "pointer",
+                        display: "inline-flex", alignItems: "center", justifyContent: "center", padding: 0,
+                      }}
+                    >
+                      i
+                    </button>
+                  )}
+                </span>
               </label>
+              {k === "copy" && copyHintOpen && (
+                <div style={{
+                  marginBottom: 8, fontSize: 11, lineHeight: 1.45, color: C.faint,
+                  background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 8, padding: "8px 10px",
+                }}>
+                  More campaign detail gives the simulator stronger context and usually produces more accurate analysis and better revision suggestions.
+                </div>
+              )}
               {meta.multiline ? (
                 <textarea
                   value={plan[k]}
@@ -1099,6 +1261,22 @@ function CampaignFormCard({
                   rows={meta.rows ?? 3}
                   style={inputStyle(isCopy)}
                 />
+              ) : k === "location" ? (
+                <>
+                  <input
+                    value={plan[k]}
+                    onChange={(e) => updateField(k, e.target.value)}
+                    placeholder={meta.placeholder}
+                    style={inputStyle(false)}
+                    list="country-options"
+                    autoComplete="off"
+                  />
+                  <datalist id="country-options">
+                    {COUNTRY_OPTIONS.map((country) => (
+                      <option key={country} value={country} />
+                    ))}
+                  </datalist>
+                </>
               ) : (
                 <input
                   value={plan[k]}
@@ -1312,6 +1490,7 @@ function FocusGroupScreen({
   const [feedbackDepth, setFeedbackDepth] = useState<"quick" | "in-depth">("in-depth");
   const [audienceDiversity, setAudienceDiversity] = useState<"low" | "medium" | "high">("high");
   const [critiqueRigour, setCritiqueRigour] = useState(6);
+  const [generatingFocusGroup, setGeneratingFocusGroup] = useState(false);
   const [infoOpen, setInfoOpen] = useState<null | "diversity" | "rigour" | "depth">(null);
   const [groups, setGroups] = useState<PersonaGroup[]>([]);
   const [generatedPanel, setGeneratedPanel] = useState<GeneratedEntry[]>([]);
@@ -1576,34 +1755,53 @@ function FocusGroupScreen({
   };
 
   const runFocusGroupAnalysis = () => {
-    const generated: GeneratedEntry[] = [];
-    let seed = 0;
-    groups.forEach((g, groupIdx) => {
-      for (let i = 0; i < g.count; i += 1) {
-        seed += 1;
-        const variance = ((groupIdx + 1) * 7 + (i + 2) * 5 + seed * 3) % (diversityRange * 2 + 1) - diversityRange;
-        const sentiment = clamp(Math.round(g.baseSentiment + harshnessDelta + variance));
-        const fname = firstNames[(groupIdx * 3 + i + seed) % firstNames.length];
-        const lname = lastNames[(groupIdx * 5 + i + seed) % lastNames.length];
-        const quote = `${quoteOpeners[(groupIdx + i + seed) % quoteOpeners.length]} ${g.summary.replace(/^"+|"+$/g, "")}`.slice(0, 155);
-        generated.push({
-          persona: {
-            name: `${fname} ${lname}`,
-            archetype: `${g.label} participant`,
-            age: sentiment >= 65 ? "Gen Z / Millennials" : sentiment >= 40 ? "Mixed adult audience" : "Mixed audience, skeptical segment",
-            job: g.label,
-            traits: g.traits.slice(0, 3),
-            sentiment,
-            quote,
-          },
-          custom: g.custom,
-          customIdx: g.sourceCustomIdx,
-        });
-      }
-    });
-    setGeneratedPanel(generated);
-    setTab("conclusion");
-    setPhase("results");
+    if (generatingFocusGroup) return;
+    setGeneratingFocusGroup(true);
+    const complete = () => {
+      const generated: GeneratedEntry[] = [];
+      let seed = 0;
+      groups.forEach((g, groupIdx) => {
+        for (let i = 0; i < g.count; i += 1) {
+          seed += 1;
+          const variance = ((groupIdx + 1) * 7 + (i + 2) * 5 + seed * 3) % (diversityRange * 2 + 1) - diversityRange;
+          const sentiment = clamp(Math.round(g.baseSentiment + harshnessDelta + variance));
+          const fname = firstNames[(groupIdx * 3 + i + seed) % firstNames.length];
+          const lname = lastNames[(groupIdx * 5 + i + seed) % lastNames.length];
+          const quote = `${quoteOpeners[(groupIdx + i + seed) % quoteOpeners.length]} ${g.summary.replace(/^"+|"+$/g, "")}`.slice(0, 155);
+          generated.push({
+            persona: {
+              name: `${fname} ${lname}`,
+              archetype: `${g.label} participant`,
+              age: sentiment >= 65 ? "Gen Z / Millennials" : sentiment >= 40 ? "Mixed adult audience" : "Mixed audience, skeptical segment",
+              job: g.label,
+              traits: g.traits.slice(0, 3),
+              sentiment,
+              quote,
+            },
+            custom: g.custom,
+            customIdx: g.sourceCustomIdx,
+          });
+        }
+      });
+      setGeneratedPanel(generated);
+      setTab("conclusion");
+      setPhase("results");
+      setGeneratingFocusGroup(false);
+    };
+    if (typeof window === "undefined") complete();
+    else window.setTimeout(complete, MIN_GENERATION_MS);
+  };
+
+  const upgradeToInDepthDiscussion = () => {
+    if (feedbackDepth === "in-depth" || generatingFocusGroup) return;
+    setGeneratingFocusGroup(true);
+    const complete = () => {
+      setFeedbackDepth("in-depth");
+      setTab("transcript");
+      setGeneratingFocusGroup(false);
+    };
+    if (typeof window === "undefined") complete();
+    else window.setTimeout(complete, MIN_GENERATION_MS);
   };
 
   const exportFocusGroupAnalysis = () => {
@@ -1679,6 +1877,55 @@ function FocusGroupScreen({
     const content = lines.join("\n");
     setExportMarkdown(content);
     setExportPreviewOpen(true);
+  };
+
+  const saveFocusGroupSnapshot = () => {
+    if (!simResult || phase !== "results") return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const payload = {
+      savedAt: now.toISOString(),
+      campaignPlan: plan,
+      focusGroupConfig: {
+        feedbackDepth,
+        audienceDiversity,
+        critiqueRigour,
+        totalParticipants,
+      },
+      personaGroups: groups.map((g) => ({
+        id: g.id,
+        label: g.label,
+        summary: g.summary,
+        traits: g.traits,
+        participants: g.count,
+        custom: g.custom,
+      })),
+      simulation: {
+        risk: simResult.risk,
+        riskScore: simResult.riskScore,
+        riskRationale: simResult.riskRationale,
+        tones: simResult.tones,
+        flags: simResult.flags,
+        improvedCopy: simResult.improvedCopy,
+        insights: simResult.insights,
+      },
+      generatedPanel: generatedPanel.map((entry) => ({
+        custom: entry.custom,
+        persona: entry.persona,
+      })),
+      transcript: feedbackDepth === "in-depth" ? transcript : [],
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `focus-group-snapshot_${stamp}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
   };
 
   const downloadFocusGroupMarkdown = () => {
@@ -1765,6 +2012,7 @@ function FocusGroupScreen({
                       <div
                         key={g.id}
                         onClick={() => setActiveGroupId(g.id)}
+                        className="clickablePersonaCard"
                         style={{
                           background: g.custom ? "#FAFAFF" : C.bg,
                           border: `1px solid ${g.custom ? "#C7D2FE" : C.line}`,
@@ -1882,13 +2130,15 @@ function FocusGroupScreen({
                           <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, color: C.ink }}>{critiqueRigour}/10</span>
                         </div>
                         <input
+                          className="rigourSlider"
                           type="range"
                           min={1}
                           max={10}
                           step={1}
                           value={critiqueRigour}
+                          onInput={(e) => setCritiqueRigour(Number((e.target as HTMLInputElement).value))}
                           onChange={(e) => setCritiqueRigour(Number(e.target.value))}
-                          style={{ width: "100%" }}
+                          style={{ width: "100%", ["--fill" as string]: `${((critiqueRigour - 1) / 9) * 100}%` }}
                         />
                         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.faint, marginTop: 3 }}>
                           <span>Supportive</span>
@@ -1930,8 +2180,19 @@ function FocusGroupScreen({
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button onClick={runFocusGroupAnalysis} style={{ ...progressBtnStyle(), padding: "12px 20px" }}>
-                    Run Focus Group Analysis →
+                  <button
+                    onClick={runFocusGroupAnalysis}
+                    disabled={generatingFocusGroup}
+                    style={{
+                      ...progressBtnStyle(),
+                      padding: "12px 20px",
+                      opacity: generatingFocusGroup ? 0.7 : 1,
+                      cursor: generatingFocusGroup ? "default" : "pointer",
+                    }}
+                  >
+                    {generatingFocusGroup
+                      ? <>Generating <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+                      : "Run Focus Group Analysis →"}
                   </button>
                 </div>
               </div>
@@ -1941,7 +2202,7 @@ function FocusGroupScreen({
               <div
                 onClick={closeAddGroupModal}
                 style={{
-                  position: "fixed", inset: 0, zIndex: 230,
+                  position: "fixed", inset: 0, zIndex: 1230,
                   background: "rgba(10,10,10,.45)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   padding: 20,
@@ -1964,12 +2225,14 @@ function FocusGroupScreen({
                       <button
                         onClick={() => setGroupHintsOpen((v) => !v)}
                         aria-expanded={groupHintsOpen}
+                        aria-label={groupHintsOpen ? "Hide hints" : "Show hints"}
+                        title={groupHintsOpen ? "Hide hints" : "Show hints"}
                         style={{
-                          display: "inline-flex", alignItems: "center", gap: 6,
+                          display: "inline-flex", alignItems: "center",
                           background: groupHintsOpen ? C.ink : "transparent",
                           color: groupHintsOpen ? C.accentInk : C.muted,
                           border: `1px solid ${groupHintsOpen ? C.ink : C.line}`,
-                          borderRadius: 999, padding: "3px 10px",
+                          borderRadius: 999, padding: "3px",
                           fontFamily: F.mono, fontSize: 10, fontWeight: 600,
                           letterSpacing: ".05em", cursor: "pointer",
                         }}
@@ -1980,7 +2243,6 @@ function FocusGroupScreen({
                           display: "inline-flex", alignItems: "center", justifyContent: "center",
                           fontSize: 10, fontWeight: 700,
                         }}>?</span>
-                        {groupHintsOpen ? "HIDE HINTS" : "HINTS"}
                       </button>
                       <button onClick={closeAddGroupModal} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 16 }}>✕</button>
                     </div>
@@ -2001,7 +2263,7 @@ function FocusGroupScreen({
               <div
                 onClick={() => setActiveGroupId(null)}
                 style={{
-                  position: "fixed", inset: 0, zIndex: 230,
+                  position: "fixed", inset: 0, zIndex: 1230,
                   background: "rgba(10,10,10,.45)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   padding: 20,
@@ -2099,7 +2361,7 @@ function FocusGroupScreen({
 
             {phase === "setup" && recentlyDeletedGroup && (
               <div style={{
-                position: "fixed", right: 20, bottom: 18, zIndex: 240,
+                position: "fixed", right: 20, bottom: 18, zIndex: 1240,
                 background: C.surface, border: `1px solid ${C.line}`,
                 borderRadius: 10, padding: "10px 12px",
                 display: "flex", alignItems: "center", gap: 10,
@@ -2145,6 +2407,33 @@ function FocusGroupScreen({
                 ))}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {feedbackDepth === "quick" && (
+                  <button
+                    onClick={upgradeToInDepthDiscussion}
+                    disabled={generatingFocusGroup}
+                    style={{
+                      background: C.surface, color: C.ink, border: `1px solid ${C.line}`,
+                      padding: "11px 14px", borderRadius: 8,
+                      fontFamily: F.body, fontSize: 13, fontWeight: 600,
+                      cursor: generatingFocusGroup ? "default" : "pointer",
+                      opacity: generatingFocusGroup ? 0.65 : 1,
+                    }}
+                  >
+                    {generatingFocusGroup
+                      ? <>Generating In-Depth <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+                      : "Switch To In-Depth Discussion"}
+                  </button>
+                )}
+                <button
+                  onClick={saveFocusGroupSnapshot}
+                  style={{
+                    background: C.surface, color: C.ink, border: `1px solid ${C.line}`,
+                    padding: "11px 14px", borderRadius: 8,
+                    fontFamily: F.body, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Save Updated Campaign Snapshot
+                </button>
                 <button
                   onClick={exportFocusGroupAnalysis}
                   style={{
@@ -2153,9 +2442,9 @@ function FocusGroupScreen({
                     fontFamily: F.body, fontSize: 13, fontWeight: 600, cursor: "pointer",
                   }}
                 >
-                  Export analysis
+                  Export Focus Group Results
                 </button>
-                <button onClick={onGoResults} style={progressBtnStyle()}>Review & fix →</button>
+                <button onClick={onGoResults} style={progressBtnStyle()}>Review & Fix →</button>
               </div>
             </div>
 
@@ -2244,7 +2533,7 @@ function FocusGroupScreen({
                 <aside style={{ position: "sticky", top: 76 }}>
                   <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>Panel</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {generatedPanel.map(({ persona, custom, customIdx }, i) => {
+                    {generatedPanel.map(({ persona, custom }, i) => {
                       const tone = persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad;
                       const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
                       return (
@@ -2275,15 +2564,6 @@ function FocusGroupScreen({
                                   : `${persona.age?.replace(/\s*\(.+?\)/, "")} · ${persona.job || "—"}`}
                               </div>
                             </div>
-                            {custom && (
-                              <button
-                                onClick={() => onRemoveCustom(customIdx)}
-                                aria-label={`Remove ${persona.name}`}
-                                style={{
-                                  background: "transparent", border: "none", color: C.faint,
-                                  cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1, flexShrink: 0,
-                                }}>✕</button>
-                            )}
                           </div>
                           <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden" }}>
                             <div style={{ height: "100%", width: `${persona.sentiment}%`, background: tone, borderRadius: 2 }} />
@@ -2301,13 +2581,12 @@ function FocusGroupScreen({
 
             {tab === "personas" && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-                {generatedPanel.map(({ persona, custom, customIdx }, i) => (
+                {generatedPanel.map(({ persona, custom }, i) => (
                   <FocusPersonaCard
                     key={`fp-${i}`}
                     persona={persona}
                     custom={custom}
                     index={i}
-                    onRemove={custom ? () => onRemoveCustom(customIdx) : undefined}
                   />
                 ))}
               </div>
@@ -2319,7 +2598,7 @@ function FocusGroupScreen({
               <div
                 onClick={() => setExportPreviewOpen(false)}
                 style={{
-                  position: "fixed", inset: 0, zIndex: 260,
+                  position: "fixed", inset: 0, zIndex: 1260,
                   background: "rgba(10,10,10,.5)",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   padding: 20,
@@ -2634,45 +2913,63 @@ type TranscriptLine =
 function buildTranscript(personas: Persona[]): TranscriptLine[] {
   if (personas.length === 0) return [];
   const lines: TranscriptLine[] = [];
-  lines.push({
-    type: "moderator", speaker: "Moderator",
-    text: "Thanks everyone for joining. Take a moment to react to the campaign. First impressions only.",
-  });
-  personas.forEach((p) => {
-    lines.push({ type: "persona", speaker: p.name, text: p.quote });
-  });
-
   const sorted = [...personas].sort((a, b) => b.sentiment - a.sentiment);
   const positive = sorted[0];
   const negative = sorted[sorted.length - 1];
   const middle = sorted[Math.floor(sorted.length / 2)];
 
+  const introPrompts = [
+    "Quick opener: what is your immediate reaction to this campaign?",
+    "First pass only: what lands for you, and what feels off?",
+    "Before overthinking, what's your gut reaction to this campaign message?",
+  ];
+  const bridgePrompts = [
+    "Let's pressure-test this. What's the biggest friction point for real shoppers?",
+    "Now challenge each other: where do you disagree on this campaign?",
+    "Zoom into execution: what is one thing this campaign still fails to prove?",
+  ];
+  const closingPrompts = [
+    "Final round: one specific change that would raise your confidence.",
+    "Before we wrap: what exact edit would make this campaign work better?",
+    "Last call: if the team changes one thing tomorrow, what should it be?",
+  ];
+
+  const uniqueIntro = Array.from(new Set(personas.map((p) => p.quote.trim()))).filter(Boolean);
+  const rotate = <T,>(arr: T[], start: number) => arr.map((_, i) => arr[(start + i) % arr.length]);
+  const speakingOrder = rotate(personas, Math.max(0, (personas[0]?.name.length ?? 0) % personas.length));
+
+  lines.push({
+    type: "moderator",
+    speaker: "Moderator",
+    text: introPrompts[(personas.length + (positive?.name.length ?? 0)) % introPrompts.length],
+  });
+
+  speakingOrder.forEach((p, i) => {
+    const first = p.name.split(" ")[0];
+    const quote = uniqueIntro[i % Math.max(1, uniqueIntro.length)] || p.quote;
+    const leadIn = i === 0 ? `${first}:` : i % 2 === 0 ? `${first}, jumping in after that:` : `${first}, your take:`;
+    lines.push({ type: "persona", speaker: p.name, text: `${leadIn} ${quote}` });
+  });
+
   if (negative && positive && negative.name !== positive.name) {
     lines.push({
-      type: "moderator", speaker: "Moderator",
-      text: `${negative.name.split(" ")[0]} — you're more critical here. What's the core objection?`,
+      type: "moderator",
+      speaker: "Moderator",
+      text: bridgePrompts[(negative.name.length + positive.name.length) % bridgePrompts.length],
     });
-    lines.push({
-      type: "persona", speaker: negative.name,
-      text: `${followUpCritical(negative)}`,
-    });
-    lines.push({
-      type: "persona", speaker: positive.name,
-      text: `${followUpSupportive(positive, negative)}`,
-    });
+    lines.push({ type: "persona", speaker: negative.name, text: followUpCritical(negative) });
+    lines.push({ type: "persona", speaker: positive.name, text: followUpSupportive(positive, negative) });
     if (middle && middle.name !== negative.name && middle.name !== positive.name) {
-      lines.push({
-        type: "persona", speaker: middle.name,
-        text: `${followUpMiddle(middle)}`,
-      });
+      lines.push({ type: "persona", speaker: middle.name, text: followUpMiddle(middle, negative, positive) });
     }
   }
 
   lines.push({
-    type: "moderator", speaker: "Moderator",
-    text: "Last question — what would actually make this campaign better for you?",
+    type: "moderator",
+    speaker: "Moderator",
+    text: closingPrompts[(personas.length + (middle?.name.length ?? 0)) % closingPrompts.length],
   });
-  personas.forEach((p) => {
+  speakingOrder.forEach((p) => {
     lines.push({ type: "persona", speaker: p.name, text: closingSuggestion(p) });
   });
 
@@ -2685,15 +2982,34 @@ function followUpCritical(p: Persona): string {
   return "Honestly, this doesn't earn my trust. The copy feels designed around me, not for me. There's nothing concrete underneath.";
 }
 function followUpSupportive(p: Persona, opp: Persona): string {
-  return `I hear you, ${opp.name.split(" ")[0]}, but I think you're being a bit harsh? It's not perfect, but it gives me something to actually engage with.`;
+  const first = opp.name.split(" ")[0];
+  return `I get that, ${first}, but I don't think it's all noise. There is a usable core here; they just need sharper proof and less slogan energy.`;
 }
-function followUpMiddle(p: Persona): string {
-  return `I'm somewhere in the middle. There's a version of this I'd respect — but right now it's trying to do too many things at once.`;
+function followUpMiddle(p: Persona, negative: Persona, positive: Persona): string {
+  const neg = negative.name.split(" ")[0];
+  const pos = positive.name.split(" ")[0];
+  return `I can see both sides - ${neg}'s trust issue is real, and ${pos} is right that the idea has potential. It needs tighter focus and cleaner evidence.`;
 }
 function closingSuggestion(p: Persona): string {
-  if (p.sentiment >= 60) return "Just keep it specific. Show, don't tell. Less hype, more proof — and I'm in.";
-  if (p.sentiment >= 40) return "Pick a lane. Either commit to a clear message or back it up with real evidence — the middle ground reads as empty.";
-  return "Drop the marketing-speak entirely. Show data, sources, real customers — anything that signals you actually mean it.";
+  const optionsHigh = [
+    "Keep the vibe, but anchor it with one concrete proof point and one clear CTA.",
+    "This is close - just swap broad claims for specifics and I'd confidently share it.",
+    "Don't over-polish it; keep the voice, add receipts, and this becomes compelling.",
+  ];
+  const optionsMid = [
+    "Narrow the message to one promise and back it with visible evidence.",
+    "Right now it's split between hype and reassurance - pick one lead message and commit.",
+    "Simplify the copy and make the value proposition explicit within the first line.",
+  ];
+  const optionsLow = [
+    "Cut the marketing filler and show concrete proof, numbers, or credible references.",
+    "Rebuild this around transparency first - what is true, verifiable, and useful to the buyer?",
+    "If they want trust, they need specifics: claims, constraints, and real examples.",
+  ];
+  const seed = p.name.length % 3;
+  if (p.sentiment >= 60) return optionsHigh[seed];
+  if (p.sentiment >= 40) return optionsMid[seed];
+  return optionsLow[seed];
 }
 
 function RiskMeter({ score, compact = false }: { score: number; compact?: boolean }) {
@@ -2817,7 +3133,7 @@ function EmptyState({ onAction }: { onAction: () => void }) {
       padding: 40, textAlign: "center",
     }}>
       <p style={{ color: C.muted, marginBottom: 16 }}>No simulation yet — run one to see results.</p>
-      <button onClick={onAction} style={progressBtnStyle()}>Go to simulator</button>
+      <button onClick={onAction} style={progressBtnStyle()}>Go To Simulator</button>
     </div>
   );
 }
