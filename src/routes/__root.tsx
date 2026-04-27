@@ -32,11 +32,15 @@ export const Route = createRootRoute({
       { title: "CampaignIQ — AI Campaign Pre-Testing Simulator" },
       { name: "description", content: "Don't guess. Simulate. Pre-test marketing campaigns across audience segments before launch." },
       { name: "author", content: "CampaignIQ" },
-      { property: "og:title", content: "CampaignIQ — Don't guess. Simulate." },
-      { property: "og:description", content: "Pre-test marketing campaigns across 20+ audience segments before a single dollar is spent." },
+      { property: "og:title", content: "CampaignIQ — AI Campaign Pre-Testing Simulator" },
+      { property: "og:description", content: "Don't guess. Simulate. Pre-test marketing campaigns across audience segments before launch." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "CampaignIQ — AI Campaign Pre-Testing Simulator" },
+      { name: "twitter:description", content: "Don't guess. Simulate. Pre-test marketing campaigns across audience segments before launch." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d04472ab-67c6-4481-b873-04a0fe93dfc9/id-preview-2b73df15--5c3f2c83-b5b6-4934-80d1-37d24f1db40e.lovable.app-1777249969180.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/d04472ab-67c6-4481-b873-04a0fe93dfc9/id-preview-2b73df15--5c3f2c83-b5b6-4934-80d1-37d24f1db40e.lovable.app-1777249969180.png" },
     ],
     links: [
       {
