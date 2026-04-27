@@ -169,8 +169,10 @@ export default function CampaignSimulator() {
   const runSimulation = async () => {
     setSimulating(true);
     setSimError(null);
-    setAppliedFixes(new Set());
-    setOriginalValues(new Map());
+    // NOTE: deliberately keep `appliedFixes` and `originalValues` across re-simulates.
+    // Once the user has accepted a one-click fix for a field, that field is locked-in
+    // — re-simulating shouldn't surface a new AI suggestion for it. The user can still
+    // hit Undo to release the lock and let the next sim flag it again.
     try {
       const response = await simulateFn({ data: { plan } });
       if (!response.ok) setSimError(response.error);
@@ -185,9 +187,14 @@ export default function CampaignSimulator() {
 
   const flagsByField = useMemo(() => {
     const map = new Map<FieldKey, FieldFlag>();
-    simResult?.flags.forEach((f) => map.set(f.field, f));
+    simResult?.flags.forEach((f) => {
+      // Once the user has accepted a one-click fix for this field, ignore any
+      // new AI flag for it — the field is considered locked-in until they undo.
+      if (appliedFixes.has(f.field)) return;
+      map.set(f.field, f);
+    });
     return map;
-  }, [simResult]);
+  }, [simResult, appliedFixes]);
 
   const applyFix = (flag: FieldFlag) => {
     setOriginalValues((prev) => {
@@ -714,7 +721,7 @@ export default function CampaignSimulator() {
                     <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                         <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
-                          Flagged fields · {simResult.flags.length}
+                          Flagged fields · {flagsByField.size}
                         </div>
                         <button onClick={runSimulation} disabled={simulating} style={{
                           background: C.ink, color: C.accentInk, border: "none",
@@ -734,7 +741,7 @@ export default function CampaignSimulator() {
                           const fullWidth = k === "copy" || k === "keyMessage" || k === "targetAudience";
                           return (
                             <div key={k}
-                              onMouseEnter={() => flag && !applied && setHoverFlag(k)}
+                              onMouseEnter={() => flag && !applied && !simulating && setHoverFlag(k)}
                               onMouseLeave={() => setHoverFlag(null)}
                               style={{
                                 position: "relative",
@@ -756,17 +763,21 @@ export default function CampaignSimulator() {
                                   )}
                                 </div>
                                 {flag && !applied && (
-                                  <button onClick={() => applyFix(flag)} style={{
-                                    background: C.ink, color: C.accentInk, border: "none",
+                                  <button onClick={() => applyFix(flag)} disabled={simulating} style={{
+                                    background: simulating ? C.faint : C.ink, color: C.accentInk, border: "none",
                                     fontFamily: F.body, fontSize: 11, fontWeight: 600,
-                                    padding: "5px 10px", borderRadius: 6, cursor: "pointer",
+                                    padding: "5px 10px", borderRadius: 6,
+                                    cursor: simulating ? "not-allowed" : "pointer",
+                                    opacity: simulating ? 0.7 : 1,
                                   }}>One-click fix</button>
                                 )}
                                 {applied && (
-                                  <button onClick={() => undoFix(k)} style={{
+                                  <button onClick={() => undoFix(k)} disabled={simulating} style={{
                                     background: "transparent", color: C.muted, border: `1px solid ${C.line}`,
                                     fontFamily: F.body, fontSize: 11, fontWeight: 600,
-                                    padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+                                    padding: "4px 10px", borderRadius: 6,
+                                    cursor: simulating ? "not-allowed" : "pointer",
+                                    opacity: simulating ? 0.5 : 1,
                                     display: "inline-flex", alignItems: "center", gap: 4,
                                   }}>
                                     <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>↶</span> Undo
@@ -778,25 +789,29 @@ export default function CampaignSimulator() {
                                   value={plan[k]}
                                   onChange={(e) => updateField(k, e.target.value)}
                                   rows={meta.rows ?? 3}
+                                  readOnly={simulating}
                                   style={{
                                     ...inputStyle(false),
                                     background: "#fff",
                                     borderColor: applied ? C.line : flag ? sevColor(sev) : C.line,
+                                    opacity: simulating ? 0.7 : 1,
                                   }}
                                 />
                               ) : (
                                 <input
                                   value={plan[k]}
                                   onChange={(e) => updateField(k, e.target.value)}
+                                  readOnly={simulating}
                                   style={{
                                     ...inputStyle(false),
                                     background: "#fff",
                                     borderColor: applied ? C.line : flag ? sevColor(sev) : C.line,
+                                    opacity: simulating ? 0.7 : 1,
                                   }}
                                 />
                               )}
 
-                              {flag && isHover && !applied && (
+                              {flag && isHover && !applied && !simulating && (
                                 <div style={{
                                   position: "absolute", left: 0, right: 0, top: "calc(100% + 6px)",
                                   background: C.ink, color: C.accentInk,
