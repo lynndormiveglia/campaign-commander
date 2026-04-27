@@ -1263,26 +1263,28 @@ function FocusPersonaCard({ persona, custom, index }: { persona: Persona; custom
       background: C.surface, border: `1px solid ${C.line}`,
       borderRadius: 14, padding: 20, position: "relative", overflow: "hidden",
     }}>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+      <span style={{
+        position: "absolute", top: 16, right: 16,
+        padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 600,
+        background: toneSoft, color: tone, fontFamily: F.mono, letterSpacing: ".04em",
+      }}>{label}</span>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14, paddingRight: 96 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12,
           background: avatarBg(index), color: C.ink,
           display: "flex", alignItems: "center", justifyContent: "center",
           fontFamily: F.display, fontSize: 16, fontWeight: 700,
+          flexShrink: 0,
         }}>{initials}</div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
             {persona.name}
             {custom && <span style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, background: C.lineSoft, padding: "2px 6px", borderRadius: 4 }}>CUSTOM</span>}
           </div>
-          <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, marginTop: 2 }}>
+          <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>
             {persona.age}{persona.job ? ` · ${persona.job}` : ""}
           </div>
         </div>
-        <span style={{
-          padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 600,
-          background: toneSoft, color: tone, fontFamily: F.mono, letterSpacing: ".04em",
-        }}>{label}</span>
       </div>
       <p style={{ fontSize: 13, color: C.ink2, lineHeight: 1.6, marginBottom: 12, fontStyle: "italic" }}>
         "{persona.quote}"
