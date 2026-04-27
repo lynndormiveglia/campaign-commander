@@ -80,7 +80,7 @@ const DEFAULT_PLAN: CampaignPlan = {
   hashtag: "#SHEINStyleDrop",
   slogan: "New fits. Fast.",
   targetAudience: "Trend-driven Gen Z and young millennial shoppers in US/UK urban markets.",
-  location: "United States & UK — urban Tier-1 cities",
+  location: "United States",
   copy: "SHEIN's spring edit just dropped - statement looks, everyday basics, and creator picks at prices you can actually wear on repeat. Tap in before top styles sell out.",
 };
 
@@ -1179,15 +1179,18 @@ function CampaignFormCard({
         </div>
         <label
           htmlFor={uploadInputId}
+          title={importingPlan ? "Analyzing file..." : "Upload file to autofill"}
+          aria-label={importingPlan ? "Analyzing file..." : "Upload file to autofill"}
           style={{
             background: C.bg, border: `1px solid ${C.line}`, color: C.ink,
-            borderRadius: 8, padding: "7px 10px",
-            fontFamily: F.body, fontSize: 12, fontWeight: 600,
+            borderRadius: 8, width: 32, height: 32,
+            fontFamily: F.body, fontSize: 14, fontWeight: 700,
             cursor: importingPlan ? "default" : "pointer",
             opacity: importingPlan ? 0.6 : 1,
+            display: "inline-flex", alignItems: "center", justifyContent: "center",
           }}
         >
-          {importingPlan ? "Analyzing file..." : "Upload file to autofill"}
+          {importingPlan ? "…" : "⭳"}
         </label>
         <input
           id={uploadInputId}
@@ -1262,21 +1265,20 @@ function CampaignFormCard({
                   style={inputStyle(isCopy)}
                 />
               ) : k === "location" ? (
-                <>
-                  <input
-                    value={plan[k]}
-                    onChange={(e) => updateField(k, e.target.value)}
-                    placeholder={meta.placeholder}
-                    style={inputStyle(false)}
-                    list="country-options"
-                    autoComplete="off"
-                  />
-                  <datalist id="country-options">
-                    {COUNTRY_OPTIONS.map((country) => (
-                      <option key={country} value={country} />
-                    ))}
-                  </datalist>
-                </>
+                <select
+                  value={plan[k]}
+                  onChange={(e) => updateField(k, e.target.value)}
+                  style={inputStyle(false)}
+                >
+                  {!COUNTRY_OPTIONS.includes(plan[k] as (typeof COUNTRY_OPTIONS)[number]) && plan[k] && (
+                    <option value={plan[k]}>{plan[k]}</option>
+                  )}
+                  {COUNTRY_OPTIONS.map((country) => (
+                    <option key={country} value={country}>
+                      {country}
+                    </option>
+                  ))}
+                </select>
               ) : (
                 <input
                   value={plan[k]}
@@ -1504,6 +1506,8 @@ function FocusGroupScreen({
   const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
   const [exportMarkdown, setExportMarkdown] = useState("");
   const exportPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const [snapshotPreviewOpen, setSnapshotPreviewOpen] = useState(false);
+  const [snapshotJson, setSnapshotJson] = useState("");
   const [recentlyDeletedGroup, setRecentlyDeletedGroup] = useState<{ group: PersonaGroup; index: number } | null>(null);
   const groupUndoTimeoutRef = useRef<number | null>(null);
 
@@ -1882,8 +1886,6 @@ function FocusGroupScreen({
   const saveFocusGroupSnapshot = () => {
     if (!simResult || phase !== "results") return;
     const now = new Date();
-    const pad = (n: number) => String(n).padStart(2, "0");
-    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
     const payload = {
       savedAt: now.toISOString(),
       campaignPlan: plan,
@@ -1916,8 +1918,16 @@ function FocusGroupScreen({
       })),
       transcript: feedbackDepth === "in-depth" ? transcript : [],
     };
+    setSnapshotJson(JSON.stringify(payload, null, 2));
+    setSnapshotPreviewOpen(true);
+  };
 
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const downloadFocusGroupSnapshot = () => {
+    if (!snapshotJson) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const blob = new Blob([snapshotJson], { type: "application/json;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -2406,7 +2416,7 @@ function FocusGroupScreen({
                   }}>{t}</span>
                 ))}
               </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
                 {feedbackDepth === "quick" && (
                   <button
                     onClick={upgradeToInDepthDiscussion}
@@ -2421,7 +2431,7 @@ function FocusGroupScreen({
                   >
                     {generatingFocusGroup
                       ? <>Generating In-Depth <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
-                      : "Switch To In-Depth Discussion"}
+                      : "🔁 In-Depth Discussion"}
                   </button>
                 )}
                 <button
@@ -2432,7 +2442,7 @@ function FocusGroupScreen({
                     fontFamily: F.body, fontSize: 13, fontWeight: 600, cursor: "pointer",
                   }}
                 >
-                  Save Updated Campaign Snapshot
+                  💾 Save Snapshot
                 </button>
                 <button
                   onClick={exportFocusGroupAnalysis}
@@ -2442,9 +2452,9 @@ function FocusGroupScreen({
                     fontFamily: F.body, fontSize: 13, fontWeight: 600, cursor: "pointer",
                   }}
                 >
-                  Export Focus Group Results
+                  📄 Export Results
                 </button>
-                <button onClick={onGoResults} style={progressBtnStyle()}>Review & Fix →</button>
+                <button onClick={onGoResults} style={progressBtnStyle()}>➡️ Review & Fix</button>
               </div>
             </div>
 
@@ -2639,6 +2649,50 @@ function FocusGroupScreen({
                     srcDoc={exportPreviewHtml}
                     style={{ border: "none", width: "100%", height: "100%", borderRadius: "0 0 14px 14px", background: "#fff" }}
                   />
+                </div>
+              </div>
+            )}
+
+            {snapshotPreviewOpen && (
+              <div
+                onClick={() => setSnapshotPreviewOpen(false)}
+                style={{
+                  position: "fixed", inset: 0, zIndex: 1270,
+                  background: "rgba(10,10,10,.5)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 20,
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: "min(980px, 100%)", height: "min(90vh, 820px)",
+                    background: C.surface, border: `1px solid ${C.line}`,
+                    borderRadius: 14, display: "grid", gridTemplateRows: "auto 1fr",
+                    boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+                  }}
+                >
+                  <div style={{ padding: 14, borderBottom: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>
+                      Save Snapshot Preview
+                    </div>
+                    <div style={{ display: "inline-flex", gap: 8 }}>
+                      <button
+                        onClick={downloadFocusGroupSnapshot}
+                        style={{ ...progressBtnStyle(), padding: "8px 12px", fontSize: 12 }}
+                      >
+                        Download JSON
+                      </button>
+                      <button onClick={() => setSnapshotPreviewOpen(false)} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 16 }}>✕</button>
+                    </div>
+                  </div>
+                  <pre style={{
+                    margin: 0, padding: 16, overflow: "auto",
+                    background: "#fff", color: C.ink2, fontSize: 12, lineHeight: 1.5,
+                    fontFamily: F.mono,
+                  }}>
+                    {snapshotJson}
+                  </pre>
                 </div>
               </div>
             )}
@@ -2947,7 +3001,13 @@ function buildTranscript(personas: Persona[]): TranscriptLine[] {
   speakingOrder.forEach((p, i) => {
     const first = p.name.split(" ")[0];
     const quote = uniqueIntro[i % Math.max(1, uniqueIntro.length)] || p.quote;
-    const leadIn = i === 0 ? `${first}:` : i % 2 === 0 ? `${first}, jumping in after that:` : `${first}, your take:`;
+    const leadIns = [
+      `${first}:`,
+      `${first}, jumping in after that:`,
+      `${first}, my read is:`,
+      `${first}, building on that:`,
+    ];
+    const leadIn = leadIns[(p.name.length + i + Math.round(p.sentiment)) % leadIns.length];
     lines.push({ type: "persona", speaker: p.name, text: `${leadIn} ${quote}` });
   });
 
@@ -2972,8 +3032,7 @@ function buildTranscript(personas: Persona[]): TranscriptLine[] {
   speakingOrder.forEach((p) => {
     lines.push({ type: "persona", speaker: p.name, text: closingSuggestion(p) });
   });
-
-  return lines;
+  return dedupeTranscriptLines(lines);
 }
 
 function followUpCritical(p: Persona): string {
@@ -3010,6 +3069,28 @@ function closingSuggestion(p: Persona): string {
   if (p.sentiment >= 60) return optionsHigh[seed];
   if (p.sentiment >= 40) return optionsMid[seed];
   return optionsLow[seed];
+}
+
+function dedupeTranscriptLines(lines: TranscriptLine[]): TranscriptLine[] {
+  const seen = new Set<string>();
+  const suffixes = [
+    "From a shopper perspective.",
+    "That's where credibility shifts.",
+    "That would change my decision.",
+    "Otherwise it still feels vague.",
+  ];
+  return lines.map((line, i) => {
+    if (line.type === "moderator") return line;
+    const normalized = line.text.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+    if (!seen.has(normalized)) {
+      seen.add(normalized);
+      return line;
+    }
+    const suffix = suffixes[i % suffixes.length];
+    const revised = `${line.text} ${suffix}`;
+    seen.add(`${normalized}-${i}`);
+    return { ...line, text: revised };
+  });
 }
 
 function RiskMeter({ score, compact = false }: { score: number; compact?: boolean }) {
