@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment, useMemo, useRef } from "react";
+import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import {
   simulateCampaign,
@@ -131,50 +132,75 @@ function riskBlurb(risk: SimulationResult["risk"]): string {
   return "High chance of backlash — rewrite before sending.";
 }
 
-function AiGenFeedback({
+const AI_FB_ICON_SIZE = 13;
+
+/** Minimal B/W thumbs only — pair with a `position: relative` card and optional `paddingRight` so titles clear the corner. */
+function AiGenFeedbackButtons({
   feedbackKey,
   value,
   onPick,
-  compact = false,
 }: {
   feedbackKey: string;
   value: "like" | "dislike" | undefined;
   onPick: (key: string, choice: "like" | "dislike") => void;
-  compact?: boolean;
 }) {
   const btn = (choice: "like" | "dislike") => {
     const active = value === choice;
+    const Icon = choice === "like" ? ThumbsUp : ThumbsDown;
     return (
       <button
         type="button"
         aria-pressed={active}
-        aria-label={choice === "like" ? "Helpful — like this AI output" : "Not helpful — dislike this AI output"}
+        aria-label={choice === "like" ? "Like this AI output" : "Dislike this AI output"}
         onClick={() => onPick(feedbackKey, choice)}
         style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          width: 22,
+          height: 22,
+          padding: 0,
           border: `1px solid ${active ? C.ink : C.line}`,
+          borderRadius: 5,
           background: active ? C.ink : C.surface,
-          color: active ? C.accentInk : C.muted,
-          borderRadius: 6,
-          padding: compact ? "3px 8px" : "4px 10px",
-          fontSize: compact ? 12 : 13,
           cursor: "pointer",
-          fontFamily: F.body,
-          fontWeight: 600,
-          lineHeight: 1,
+          flexShrink: 0,
         }}
       >
-        {choice === "like" ? "👍" : "👎"}
+        <Icon
+          size={AI_FB_ICON_SIZE}
+          strokeWidth={1.35}
+          color={active ? C.accentInk : C.ink}
+        />
       </button>
     );
   };
   return (
-    <div style={{ display: "inline-flex", alignItems: "center", gap: compact ? 6 : 8, flexWrap: "wrap" }}>
-      {!compact && (
-        <span style={{ fontFamily: F.mono, fontSize: 9, color: C.faint, letterSpacing: ".07em", textTransform: "uppercase" }}>
-          Helpful?
-        </span>
-      )}
-      <div style={{ display: "inline-flex", gap: 6 }}>{btn("like")}{btn("dislike")}</div>
+    <div style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      {btn("like")}
+      {btn("dislike")}
+    </div>
+  );
+}
+
+function AiGenFeedback(props: {
+  feedbackKey: string;
+  value: "like" | "dislike" | undefined;
+  onPick: (key: string, choice: "like" | "dislike") => void;
+}) {
+  return (
+    <div
+      style={{
+        position: "absolute",
+        top: 10,
+        right: 10,
+        zIndex: 2,
+        display: "flex",
+        alignItems: "center",
+        gap: 4,
+      }}
+    >
+      <AiGenFeedbackButtons {...props} />
     </div>
   );
 }
@@ -783,9 +809,16 @@ export default function CampaignSimulator() {
 
                   {simResult && (
                     <div className="fadeIn" style={{
+                      position: "relative",
                       background: C.surface, border: `1px solid ${C.line}`,
                       borderRadius: 12, padding: "14px 18px",
+                      paddingRight: 72,
                     }}>
+                      <AiGenFeedback
+                        feedbackKey="sim:risk-rationale"
+                        value={aiGenFeedback["sim:risk-rationale"]}
+                        onPick={pickAiGenFeedback}
+                      />
                       <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
                         <div style={{ flexShrink: 0, maxWidth: 260 }}>
                           <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 2 }}>
@@ -823,16 +856,9 @@ export default function CampaignSimulator() {
                         </div>
                       )}
                       <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.lineSoft}` }}>
-                        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", justifyContent: "space-between" }}>
-                          <p style={{ flex: 1, minWidth: 220, fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
-                            {simResult.riskRationale}
-                          </p>
-                          <AiGenFeedback
-                            feedbackKey="sim:risk-rationale"
-                            value={aiGenFeedback["sim:risk-rationale"]}
-                            onPick={pickAiGenFeedback}
-                          />
-                        </div>
+                        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
+                          {simResult.riskRationale}
+                        </p>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
                           {simResult.tones.map((t) => (
                             <span key={t} style={{
@@ -868,19 +894,17 @@ export default function CampaignSimulator() {
                     </p>
                     {simResult ? (
                       <div style={{ display: "grid", gap: 10 }}>
-                        <div style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12 }}>
+                        <div style={{ position: "relative", background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12, paddingRight: 72 }}>
+                          <AiGenFeedback
+                            feedbackKey="sim:overall-summary"
+                            value={aiGenFeedback["sim:overall-summary"]}
+                            onPick={pickAiGenFeedback}
+                          />
                           <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
                             Summary
                           </div>
                           <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.55 }}>
                             {simResult.overallCheck?.summary || "No summary available yet."}
-                          </div>
-                          <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
-                            <AiGenFeedback
-                              feedbackKey="sim:overall-summary"
-                              value={aiGenFeedback["sim:overall-summary"]}
-                              onPick={pickAiGenFeedback}
-                            />
                           </div>
                         </div>
                         <BriefListSection
@@ -906,6 +930,7 @@ export default function CampaignSimulator() {
                         />
                         <div
                           style={{
+                            position: "relative",
                             borderTop: `1px solid ${C.lineSoft}`,
                             paddingTop: 10,
                             background:
@@ -930,8 +955,14 @@ export default function CampaignSimulator() {
                             }`,
                             borderRadius: 10,
                             padding: 12,
+                            paddingRight: 72,
                           }}
                         >
+                          <AiGenFeedback
+                            feedbackKey="sim:overall-verdict"
+                            value={aiGenFeedback["sim:overall-verdict"]}
+                            onPick={pickAiGenFeedback}
+                          />
                           <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
                             Overall Verdict
                           </div>
@@ -961,13 +992,6 @@ export default function CampaignSimulator() {
                           </div>
                           <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, fontWeight: 600 }}>
                             {simResult.overallCheck?.overallVerdict || "No final verdict available yet."}
-                          </div>
-                          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-                            <AiGenFeedback
-                              feedbackKey="sim:overall-verdict"
-                              value={aiGenFeedback["sim:overall-verdict"]}
-                              onPick={pickAiGenFeedback}
-                            />
                           </div>
                         </div>
                       </div>
@@ -1177,20 +1201,18 @@ export default function CampaignSimulator() {
                         </div>
                         <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", background: C.surface }}>
                           <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.lineSoft}`, fontFamily: F.mono, fontSize: 11, color: C.ink, letterSpacing: ".08em", textTransform: "uppercase", textDecoration: "underline", textDecorationColor: C.good, textUnderlineOffset: 4 }}>Optimized</div>
-                          <div style={{ padding: 16 }}>
+                          <div style={{ position: "relative", padding: 16, paddingRight: 72 }}>
+                            <AiGenFeedback
+                              feedbackKey="results:improved-copy"
+                              value={aiGenFeedback["results:improved-copy"]}
+                              onPick={pickAiGenFeedback}
+                            />
                             <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.6, fontStyle: "italic", marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.lineSoft}` }}>
                               {simResult.improvedCopy || plan.copy}
                             </div>
                             <Stat label="Engagement" val="4.8%" tone="good" />
                             <Stat label="Sentiment" val="76% positive" tone="good" />
                             <Stat label="Backlash Risk" val="LOW" tone="good" pill />
-                            <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 12, paddingTop: 10, display: "flex", justifyContent: "flex-end" }}>
-                              <AiGenFeedback
-                                feedbackKey="results:improved-copy"
-                                value={aiGenFeedback["results:improved-copy"]}
-                                onPick={pickAiGenFeedback}
-                              />
-                            </div>
                           </div>
                         </div>
                       </div>
@@ -2103,7 +2125,10 @@ function SegmentCard({
 }) {
   const tone = sentimentColor(segment.sentimentPct);
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
+    <div style={{ position: "relative", border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, paddingRight: aiFeedbackKey ? 72 : 14, background: C.bg }}>
+      {aiFeedbackKey && onAiFeedbackPick && (
+        <AiGenFeedback feedbackKey={aiFeedbackKey} value={aiFeedback} onPick={onAiFeedbackPick} />
+      )}
       <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>
         Audience Segment
       </div>
@@ -2123,11 +2148,6 @@ function SegmentCard({
       <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5, fontStyle: "italic" }}>
         "{segment.topReaction}"
       </div>
-      {aiFeedbackKey && onAiFeedbackPick && (
-        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
-          <AiGenFeedback feedbackKey={aiFeedbackKey} value={aiFeedback} onPick={onAiFeedbackPick} />
-        </div>
-      )}
     </div>
   );
 }
@@ -2142,27 +2162,29 @@ function PersonaCard({
   aiFeedback?: "like" | "dislike";
   onAiFeedbackPick?: (key: string, choice: "like" | "dislike") => void;
 }) {
+  const showFb = !!(aiFeedbackKey && onAiFeedbackPick);
   return (
-    <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>{persona.name}</div>
-            {customBadge && (
-              <span style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, background: C.lineSoft, padding: "2px 6px", borderRadius: 4, letterSpacing: ".06em" }}>CUSTOM</span>
-            )}
-          </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-            {persona.age}
-            {persona.gender ? ` · ${persona.gender}` : ""}
-            {persona.religion ? ` · ${persona.religion}` : ""}
-            {persona.job ? ` · ${persona.job}` : ""}
-          </div>
-          <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 4, letterSpacing: ".02em" }}>{persona.archetype}</div>
-        </div>
+    <div style={{ position: "relative", border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, paddingRight: showFb || onRemove ? 76 : 14, background: C.bg }}>
+      <div style={{ position: "absolute", top: 8, right: 8, zIndex: 2, display: "flex", alignItems: "center", gap: 6 }}>
         {onRemove && (
-          <button onClick={onRemove} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 14, padding: 2 }}>✕</button>
+          <button type="button" onClick={onRemove} aria-label="Remove persona" style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1 }}>✕</button>
         )}
+        {showFb && <AiGenFeedbackButtons feedbackKey={aiFeedbackKey!} value={aiFeedback} onPick={onAiFeedbackPick!} />}
+      </div>
+      <div style={{ marginBottom: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em" }}>{persona.name}</div>
+          {customBadge && (
+            <span style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, background: C.lineSoft, padding: "2px 6px", borderRadius: 4, letterSpacing: ".06em" }}>CUSTOM</span>
+          )}
+        </div>
+        <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+          {persona.age}
+          {persona.gender ? ` · ${persona.gender}` : ""}
+          {persona.religion ? ` · ${persona.religion}` : ""}
+          {persona.job ? ` · ${persona.job}` : ""}
+        </div>
+        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 4, letterSpacing: ".02em" }}>{persona.archetype}</div>
       </div>
       <div style={{ height: 3, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
         <div style={{
@@ -2178,11 +2200,6 @@ function PersonaCard({
         {sentimentLabel(persona.sentiment)}
       </div>
       <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5, fontStyle: "italic" }}>"{persona.quote}"</div>
-      {aiFeedbackKey && onAiFeedbackPick && (
-        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
-          <AiGenFeedback feedbackKey={aiFeedbackKey} value={aiFeedback} onPick={onAiFeedbackPick} />
-        </div>
-      )}
     </div>
   );
 }
@@ -2772,20 +2789,28 @@ function FocusGroupScreen({
                         }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
-                          <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 6 }}>{g.label}</div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeAudienceGroup(g.id);
-                            }}
-                            aria-label={`Remove ${g.label}`}
-                            style={{
-                              background: "transparent", border: "none", color: C.faint, cursor: "pointer",
-                              fontSize: 14, padding: 2, lineHeight: 1, flexShrink: 0,
-                            }}
-                          >
-                            ✕
-                          </button>
+                          <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 6, flex: 1, minWidth: 0, paddingRight: 8 }}>{g.label}</div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeAudienceGroup(g.id);
+                              }}
+                              aria-label={`Remove ${g.label}`}
+                              type="button"
+                              style={{
+                                background: "transparent", border: "none", color: C.faint, cursor: "pointer",
+                                fontSize: 14, padding: 2, lineHeight: 1, flexShrink: 0,
+                              }}
+                            >
+                              ✕
+                            </button>
+                            <AiGenFeedbackButtons
+                              feedbackKey={`fg:setup-group:${g.id}`}
+                              value={fgAiFeedback[`fg:setup-group:${g.id}`]}
+                              onPick={pickFgAiFeedback}
+                            />
+                          </div>
                         </div>
                         <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8, fontStyle: "italic" }}>"{g.summary}"</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
@@ -2808,16 +2833,6 @@ function FocusGroupScreen({
                                 opacity: totalParticipants >= MAX_FOCUS_GROUP_PARTICIPANTS ? 0.45 : 1,
                               }}>+</button>
                           </div>
-                        </div>
-                        <div
-                          onClick={(e) => e.stopPropagation()}
-                          style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}
-                        >
-                          <AiGenFeedback
-                            feedbackKey={`fg:setup-group:${g.id}`}
-                            value={fgAiFeedback[`fg:setup-group:${g.id}`]}
-                            onPick={pickFgAiFeedback}
-                          />
                         </div>
                       </div>
                     ))}
@@ -3250,19 +3265,20 @@ function FocusGroupScreen({
                     {transcript.map((line, i) => {
                       if (line.type === "moderator") {
                         return (
-                          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-                            <div style={{
-                              background: C.bg, border: `1px dashed ${C.line}`, borderRadius: 10,
-                              padding: "8px 14px", fontFamily: F.mono, fontSize: 11,
-                              color: C.muted, fontStyle: "italic", maxWidth: "70%", textAlign: "center",
-                              letterSpacing: ".02em",
-                            }}>📋 {line.text}</div>
-                            <AiGenFeedback
-                              compact
-                              feedbackKey={`fg:transcript-mod:${i}`}
-                              value={fgAiFeedback[`fg:transcript-mod:${i}`]}
-                              onPick={pickFgAiFeedback}
-                            />
+                          <div key={i} style={{ display: "flex", justifyContent: "center" }}>
+                            <div style={{ position: "relative", maxWidth: "70%", paddingRight: 56, paddingTop: 2 }}>
+                              <AiGenFeedback
+                                feedbackKey={`fg:transcript-mod:${i}`}
+                                value={fgAiFeedback[`fg:transcript-mod:${i}`]}
+                                onPick={pickFgAiFeedback}
+                              />
+                              <div style={{
+                                background: C.bg, border: `1px dashed ${C.line}`, borderRadius: 10,
+                                padding: "8px 14px", fontFamily: F.mono, fontSize: 11,
+                                color: C.muted, fontStyle: "italic", textAlign: "center",
+                                letterSpacing: ".02em",
+                              }}>📋 {line.text}</div>
+                            </div>
                           </div>
                         );
                       }
@@ -3288,20 +3304,25 @@ function FocusGroupScreen({
                             )}
                           </div>
                           <div style={{
-                            padding: "12px 16px",
-                            borderRadius: isLeft ? "4px 14px 14px 14px" : "14px 4px 14px 14px",
-                            fontSize: 14, lineHeight: 1.6, maxWidth: "82%",
-                            background: isLeft ? C.surface : C.ink,
-                            color: isLeft ? C.ink : C.accentInk,
-                            border: isLeft ? `1px solid ${C.line}` : "none",
-                          }}>{line.text}</div>
-                          <div style={{ alignSelf: isLeft ? "flex-start" : "flex-end", maxWidth: "82%" }}>
+                            position: "relative",
+                            alignSelf: isLeft ? "flex-start" : "flex-end",
+                            maxWidth: "82%",
+                            paddingRight: 56,
+                            paddingTop: 2,
+                          }}>
                             <AiGenFeedback
-                              compact
                               feedbackKey={`fg:transcript:${i}`}
                               value={fgAiFeedback[`fg:transcript:${i}`]}
                               onPick={pickFgAiFeedback}
                             />
+                            <div style={{
+                              padding: "12px 16px",
+                              borderRadius: isLeft ? "4px 14px 14px 14px" : "14px 4px 14px 14px",
+                              fontSize: 14, lineHeight: 1.6,
+                              background: isLeft ? C.surface : C.ink,
+                              color: isLeft ? C.ink : C.accentInk,
+                              border: isLeft ? `1px solid ${C.line}` : "none",
+                            }}>{line.text}</div>
                           </div>
                         </div>
                       );
@@ -3317,9 +3338,16 @@ function FocusGroupScreen({
                       const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
                       return (
                         <div key={`panel-${i}`} style={{
+                          position: "relative",
                           background: C.surface, border: `1px solid ${C.line}`,
                           borderRadius: 10, padding: "10px 12px",
+                          paddingRight: 56,
                         }}>
+                          <AiGenFeedback
+                            feedbackKey={`fg:panel:${i}`}
+                            value={fgAiFeedback[`fg:panel:${i}`]}
+                            onPick={pickFgAiFeedback}
+                          />
                           <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
                             <div style={{
                               width: 28, height: 28, borderRadius: 7,
@@ -3349,14 +3377,6 @@ function FocusGroupScreen({
                           </div>
                           <div style={{ fontFamily: F.mono, fontSize: 10, color: tone, fontWeight: 600, marginTop: 4, letterSpacing: ".04em" }}>
                             {sentimentLabel(persona.sentiment)}
-                          </div>
-                          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
-                            <AiGenFeedback
-                              compact
-                              feedbackKey={`fg:panel:${i}`}
-                              value={fgAiFeedback[`fg:panel:${i}`]}
-                              onPick={pickFgAiFeedback}
-                            />
                           </div>
                         </div>
                       );
@@ -3535,9 +3555,14 @@ function ConclusionTab({
           const fbKey = CONCLUSION_FEEDBACK_KEYS[s.title];
           return (
             <div key={s.title} style={{
+              position: "relative",
               background: s.toneSoft, border: `1px solid ${s.border}`,
               borderRadius: 12, padding: 18,
+              paddingRight: fbKey ? 72 : 18,
             }}>
+              {fbKey && onAiFeedbackPick && (
+                <AiGenFeedback feedbackKey={fbKey} value={aiFeedback?.[fbKey]} onPick={onAiFeedbackPick} />
+              )}
               <div style={{
                 fontFamily: F.mono, fontSize: 11, fontWeight: 700,
                 color: s.tone, letterSpacing: ".06em", textTransform: "uppercase",
@@ -3557,11 +3582,6 @@ function ConclusionTab({
                   ))}
                 </ul>
               )}
-              {fbKey && onAiFeedbackPick && (
-                <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-                  <AiGenFeedback feedbackKey={fbKey} value={aiFeedback?.[fbKey]} onPick={onAiFeedbackPick} />
-                </div>
-              )}
             </div>
           );
         })}
@@ -3569,9 +3589,18 @@ function ConclusionTab({
 
       {insights.predictedPerformance && (
         <div style={{
+          position: "relative",
           background: C.surface, border: `1px solid ${C.line}`,
           borderRadius: 12, padding: 22,
+          paddingRight: onAiFeedbackPick ? 72 : 22,
         }}>
+          {onAiFeedbackPick && (
+            <AiGenFeedback
+              feedbackKey="fg:conclusion:predicted"
+              value={aiFeedback?.["fg:conclusion:predicted"]}
+              onPick={onAiFeedbackPick}
+            />
+          )}
           <div style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: C.ink, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 10 }}>
             Predicted Performance
           </div>
@@ -3612,15 +3641,6 @@ function ConclusionTab({
               </div>
             </div>
           </div>
-          {onAiFeedbackPick && (
-            <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
-              <AiGenFeedback
-                feedbackKey="fg:conclusion:predicted"
-                value={aiFeedback?.["fg:conclusion:predicted"]}
-                onPick={onAiFeedbackPick}
-              />
-            </div>
-          )}
         </div>
       )}
     </div>
@@ -3641,24 +3661,35 @@ function FocusPersonaCard({
   const tone = sentimentColor(persona.sentiment);
   const label = sentimentLabel(persona.sentiment);
   const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
+  const showFb = !!(aiFeedbackKey && onAiFeedbackPick);
   return (
     <div style={{
       background: C.surface, border: `1px solid ${C.line}`,
       borderRadius: 14, padding: 20, position: "relative", overflow: "hidden",
+      paddingRight: showFb || onRemove ? 88 : 20,
     }}>
-      {onRemove && (
-        <button
-          onClick={onRemove}
-          aria-label={`Remove ${persona.name}`}
-          style={{
-            position: "absolute", top: 14, right: 14,
-            width: 24, height: 24, borderRadius: 6,
-            background: "transparent", border: `1px solid ${C.line}`,
-            color: C.faint, cursor: "pointer", fontSize: 13, lineHeight: 1,
-            display: "flex", alignItems: "center", justifyContent: "center",
-          }}>✕</button>
-      )}
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14, paddingRight: onRemove ? 36 : 0 }}>
+      <div style={{ position: "absolute", top: 14, right: 14, zIndex: 2, display: "flex", alignItems: "center", gap: 6 }}>
+        {onRemove && (
+          <button
+            type="button"
+            onClick={onRemove}
+            aria-label={`Remove ${persona.name}`}
+            style={{
+              width: 24, height: 24, borderRadius: 6,
+              background: "transparent", border: `1px solid ${C.line}`,
+              color: C.faint, cursor: "pointer", fontSize: 13, lineHeight: 1,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+            }}
+          >
+            ✕
+          </button>
+        )}
+        {showFb && (
+          <AiGenFeedbackButtons feedbackKey={aiFeedbackKey!} value={aiFeedback} onPick={onAiFeedbackPick!} />
+        )}
+      </div>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12,
           background: avatarBg(index), color: C.ink,
@@ -3705,11 +3736,6 @@ function FocusPersonaCard({
           <div style={{ height: "100%", background: tone, width: `${persona.sentiment}%`, borderRadius: 3 }} />
         </div>
       </div>
-      {aiFeedbackKey && onAiFeedbackPick && (
-        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 14, paddingTop: 10, display: "flex", justifyContent: "flex-end" }}>
-          <AiGenFeedback feedbackKey={aiFeedbackKey} value={aiFeedback} onPick={onAiFeedbackPick} />
-        </div>
-      )}
     </div>
   );
 }
@@ -3789,7 +3815,10 @@ function BriefListSection({
   onFeedbackPick?: (key: string, choice: "like" | "dislike") => void;
 }) {
   return (
-    <div style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12 }}>
+    <div style={{ position: "relative", background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12, paddingRight: feedbackKey ? 72 : 12 }}>
+      {feedbackKey && onFeedbackPick && (
+        <AiGenFeedback feedbackKey={feedbackKey} value={feedbackValue} onPick={onFeedbackPick} />
+      )}
       <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
         {title}
       </div>
@@ -3804,11 +3833,6 @@ function BriefListSection({
       ) : (
         <div style={{ fontSize: 12, color: C.faint }}>
           No items provided.
-        </div>
-      )}
-      {feedbackKey && onFeedbackPick && (
-        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
-          <AiGenFeedback feedbackKey={feedbackKey} value={feedbackValue} onPick={onFeedbackPick} />
         </div>
       )}
     </div>
