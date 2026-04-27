@@ -135,7 +135,7 @@ export default function CampaignSimulator() {
 
   const [plan, setPlan] = useState<CampaignPlan>(DEFAULT_PLAN);
   const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
-  const [recentlyDeletedPersona, setRecentlyDeletedPersona] = useState<{ persona: Persona; index: number } | null>(null);
+  const [recentlyDeletedPersonas, setRecentlyDeletedPersonas] = useState<Array<{ persona: Persona; index: number }>>([]);
   const deleteUndoTimeoutRef = useRef<number | null>(null);
   const [draftDescription, setDraftDescription] = useState("");
   const [hintsOpen, setHintsOpen] = useState(false);
@@ -262,7 +262,7 @@ export default function CampaignSimulator() {
     setCustomPersonas((prev) => {
       const persona = prev[idx];
       if (!persona) return prev;
-      setRecentlyDeletedPersona({ persona, index: idx });
+      setRecentlyDeletedPersonas((stack) => [...stack, { persona, index: idx }]);
       return prev.filter((_, i) => i !== idx);
     });
     if (deleteUndoTimeoutRef.current !== null && typeof window !== "undefined") {
@@ -270,24 +270,38 @@ export default function CampaignSimulator() {
     }
     if (typeof window !== "undefined") {
       deleteUndoTimeoutRef.current = window.setTimeout(() => {
-        setRecentlyDeletedPersona(null);
+        setRecentlyDeletedPersonas([]);
         deleteUndoTimeoutRef.current = null;
       }, 6000);
     }
   };
 
   const undoRemoveCustomPersona = () => {
-    if (!recentlyDeletedPersona) return;
-    const { persona, index } = recentlyDeletedPersona;
+    if (!recentlyDeletedPersonas.length) return;
+    const last = recentlyDeletedPersonas[recentlyDeletedPersonas.length - 1];
+    const { persona, index } = last;
     setCustomPersonas((prev) => {
       const next = [...prev];
       const clamped = Math.max(0, Math.min(index, next.length));
       next.splice(clamped, 0, persona);
       return next;
     });
-    setRecentlyDeletedPersona(null);
+    let remainingDeletes = 0;
+    setRecentlyDeletedPersonas((stack) => {
+      const next = stack.slice(0, -1);
+      remainingDeletes = next.length;
+      return next;
+    });
+
     if (deleteUndoTimeoutRef.current !== null && typeof window !== "undefined") {
       window.clearTimeout(deleteUndoTimeoutRef.current);
+    }
+    if (typeof window !== "undefined" && remainingDeletes > 0) {
+      deleteUndoTimeoutRef.current = window.setTimeout(() => {
+        setRecentlyDeletedPersonas([]);
+        deleteUndoTimeoutRef.current = null;
+      }, 6000);
+    } else {
       deleteUndoTimeoutRef.current = null;
     }
   };
@@ -390,11 +404,11 @@ export default function CampaignSimulator() {
 
               <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
                 <button onClick={launchCampaign} style={{
-                  background: C.ink, color: C.accentInk, border: "none",
-                  padding: "16px 40px", borderRadius: 10,
-                  fontFamily: F.body, fontSize: 16, fontWeight: 600, cursor: "pointer",
-                  display: "inline-flex", alignItems: "center", gap: 12,
-                  boxShadow: "0 8px 32px rgba(0,0,0,.18)",
+                  ...progressBtnStyle(),
+                  padding: "16px 40px",
+                  fontSize: 16,
+                  borderRadius: 10,
+                  gap: 12,
                 }}>
                   Launch Campaign Now
                   <span style={{ fontFamily: F.mono, fontSize: 13, opacity: .7 }}>→</span>
@@ -489,8 +503,11 @@ export default function CampaignSimulator() {
                     ))}
                   </div>
                   <button onClick={() => goTo(2)} style={{
-                    width: "100%", background: "#fff", color: C.ink, border: "none",
-                    padding: 16, borderRadius: 10, fontFamily: F.body, fontSize: 15, fontWeight: 600, cursor: "pointer",
+                    ...progressBtnStyle(),
+                    width: "100%",
+                    padding: 16,
+                    borderRadius: 10,
+                    fontSize: 15,
                   }}>See the cost of this mistake →</button>
                 </div>
               </div>
@@ -536,7 +553,7 @@ export default function CampaignSimulator() {
                   </div>
                 ))}
               </div>
-              <button onClick={() => goTo(3)} style={primaryBtnStyle()}>What if we tested this first? →</button>
+              <button onClick={() => goTo(3)} style={progressBtnStyle()}>What if we tested this first? →</button>
             </div>
           </div>
         )}
@@ -611,7 +628,7 @@ export default function CampaignSimulator() {
 
                   {simResult && (
                     <div className="fadeIn" style={{ display: "flex", justifyContent: "flex-end" }}>
-                      <button onClick={() => goTo(5)} style={primaryBtnStyle()}>
+                      <button onClick={() => goTo(5)} style={progressBtnStyle()}>
                         See how to improve →
                       </button>
                     </div>
@@ -906,7 +923,7 @@ export default function CampaignSimulator() {
                     </div>
 
                     <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                      <button onClick={() => goTo(4)} style={primaryBtnStyle()}>
+                      <button onClick={() => goTo(4)} style={progressBtnStyle()}>
                         See your focus group →
                       </button>
                     </div>
@@ -1012,7 +1029,7 @@ export default function CampaignSimulator() {
           </div>
         )}
 
-        {recentlyDeletedPersona && (
+        {recentlyDeletedPersonas.length > 0 && (
           <div style={{
             position: "fixed", right: 20, bottom: 18, zIndex: 220,
             background: C.surface, border: `1px solid ${C.line}`,
@@ -1021,7 +1038,7 @@ export default function CampaignSimulator() {
             boxShadow: "0 10px 30px rgba(0,0,0,.12)",
           }}>
             <span style={{ fontSize: 12, color: C.muted }}>
-              Removed custom persona
+              Removed custom persona{recentlyDeletedPersonas.length > 1 ? ` (${recentlyDeletedPersonas.length} pending)` : ""}
             </span>
             <button
               onClick={undoRemoveCustomPersona}
@@ -1300,10 +1317,13 @@ function FocusGroupScreen({
   const [generatedPanel, setGeneratedPanel] = useState<GeneratedEntry[]>([]);
 
   const [showAddGroup, setShowAddGroup] = useState(false);
+  const [groupHintsOpen, setGroupHintsOpen] = useState(false);
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null);
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [groupSummaryDraft, setGroupSummaryDraft] = useState("");
   const [groupTraitsDraft, setGroupTraitsDraft] = useState("");
+  const [recentlyDeletedGroup, setRecentlyDeletedGroup] = useState<{ group: PersonaGroup; index: number } | null>(null);
+  const groupUndoTimeoutRef = useRef<number | null>(null);
 
   const baseGroups = useMemo<PersonaGroup[]>(() => {
     if (!simResult) return [];
@@ -1360,6 +1380,14 @@ function FocusGroupScreen({
       setTab("conclusion");
     }
   }, [feedbackDepth, tab]);
+
+  useEffect(() => {
+    return () => {
+      if (groupUndoTimeoutRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(groupUndoTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const transcript = useMemo(() => {
     if (feedbackDepth === "quick") return [];
@@ -1432,9 +1460,47 @@ function FocusGroupScreen({
 
   const closeAddGroupModal = () => {
     setShowAddGroup(false);
+    setGroupHintsOpen(false);
     setGroupNameDraft("");
     setGroupSummaryDraft("");
     setGroupTraitsDraft("");
+  };
+
+  const removeAudienceGroup = (id: string) => {
+    setGroups((prev) => {
+      const idx = prev.findIndex((g) => g.id === id);
+      if (idx < 0) return prev;
+      const removed = prev[idx];
+      const next = prev.filter((g) => g.id !== id);
+      setRecentlyDeletedGroup({ group: removed, index: idx });
+      if (groupUndoTimeoutRef.current !== null && typeof window !== "undefined") {
+        window.clearTimeout(groupUndoTimeoutRef.current);
+      }
+      if (typeof window !== "undefined") {
+        groupUndoTimeoutRef.current = window.setTimeout(() => {
+          setRecentlyDeletedGroup(null);
+          groupUndoTimeoutRef.current = null;
+        }, 6000);
+      }
+      if (activeGroupId === id) setActiveGroupId(null);
+      return next;
+    });
+  };
+
+  const undoRemoveAudienceGroup = () => {
+    if (!recentlyDeletedGroup) return;
+    const { group, index } = recentlyDeletedGroup;
+    setGroups((prev) => {
+      const next = prev.slice();
+      const insertAt = Math.max(0, Math.min(index, next.length));
+      next.splice(insertAt, 0, group);
+      return next;
+    });
+    setRecentlyDeletedGroup(null);
+    if (groupUndoTimeoutRef.current !== null && typeof window !== "undefined") {
+      window.clearTimeout(groupUndoTimeoutRef.current);
+      groupUndoTimeoutRef.current = null;
+    }
   };
 
   const buildGroupParticipantPreview = (group: PersonaGroup) => {
@@ -1668,7 +1734,22 @@ function FocusGroupScreen({
                           cursor: "pointer",
                         }}
                       >
-                        <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 6 }}>{g.label}</div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
+                          <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 6 }}>{g.label}</div>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeAudienceGroup(g.id);
+                            }}
+                            aria-label={`Remove ${g.label}`}
+                            style={{
+                              background: "transparent", border: "none", color: C.faint, cursor: "pointer",
+                              fontSize: 14, padding: 2, lineHeight: 1, flexShrink: 0,
+                            }}
+                          >
+                            ✕
+                          </button>
+                        </div>
                         <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8, fontStyle: "italic" }}>"{g.summary}"</div>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 10 }}>
                           {g.traits.slice(0, 3).map((t) => (
@@ -1810,7 +1891,7 @@ function FocusGroupScreen({
                 </div>
 
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                  <button onClick={runFocusGroupAnalysis} style={{ ...primaryBtnStyle(), padding: "12px 20px" }}>
+                  <button onClick={runFocusGroupAnalysis} style={{ ...progressBtnStyle(), padding: "12px 20px" }}>
                     Run Focus Group Analysis →
                   </button>
                 </div>
@@ -1840,8 +1921,32 @@ function FocusGroupScreen({
                     <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
                       Add Custom Audience Group
                     </div>
-                    <button onClick={closeAddGroupModal} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 16 }}>✕</button>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                      <button
+                        onClick={() => setGroupHintsOpen((v) => !v)}
+                        aria-expanded={groupHintsOpen}
+                        style={{
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                          background: groupHintsOpen ? C.ink : "transparent",
+                          color: groupHintsOpen ? C.accentInk : C.muted,
+                          border: `1px solid ${groupHintsOpen ? C.ink : C.line}`,
+                          borderRadius: 999, padding: "3px 10px",
+                          fontFamily: F.mono, fontSize: 10, fontWeight: 600,
+                          letterSpacing: ".05em", cursor: "pointer",
+                        }}
+                      >
+                        <span style={{
+                          width: 14, height: 14, borderRadius: "50%",
+                          background: groupHintsOpen ? "rgba(255,255,255,.18)" : C.lineSoft,
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 10, fontWeight: 700,
+                        }}>?</span>
+                        {groupHintsOpen ? "HIDE HINTS" : "HINTS"}
+                      </button>
+                      <button onClick={closeAddGroupModal} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 16 }}>✕</button>
+                    </div>
                   </div>
+                  {groupHintsOpen && <AudienceGroupHintPanel />}
                   <input value={groupNameDraft} onChange={(e) => setGroupNameDraft(e.target.value)} placeholder="Group name (e.g. Price-sensitive Gen Z commuters)" style={inputStyle(false)} />
                   <textarea value={groupSummaryDraft} onChange={(e) => setGroupSummaryDraft(e.target.value)} rows={3} placeholder="How this group typically reacts..." style={inputStyle(false)} />
                   <input value={groupTraitsDraft} onChange={(e) => setGroupTraitsDraft(e.target.value)} placeholder="Traits (comma separated, e.g. vocal, skeptical, trend-aware)" style={inputStyle(false)} />
@@ -1953,6 +2058,30 @@ function FocusGroupScreen({
               </div>
             )}
 
+            {phase === "setup" && recentlyDeletedGroup && (
+              <div style={{
+                position: "fixed", right: 20, bottom: 18, zIndex: 240,
+                background: C.surface, border: `1px solid ${C.line}`,
+                borderRadius: 10, padding: "10px 12px",
+                display: "flex", alignItems: "center", gap: 10,
+                boxShadow: "0 10px 30px rgba(0,0,0,.12)",
+              }}>
+                <span style={{ fontSize: 12, color: C.muted }}>
+                  Removed audience group
+                </span>
+                <button
+                  onClick={undoRemoveAudienceGroup}
+                  style={{
+                    background: C.ink, color: C.accentInk, border: "none",
+                    borderRadius: 6, padding: "5px 10px",
+                    fontFamily: F.body, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  }}
+                >
+                  Undo
+                </button>
+              </div>
+            )}
+
             {phase === "results" && (
               <>
             {/* Summary bar */}
@@ -1987,7 +2116,7 @@ function FocusGroupScreen({
                 >
                   Export analysis
                 </button>
-                <button onClick={onGoResults} style={primaryBtnStyle()}>Review & fix →</button>
+                <button onClick={onGoResults} style={progressBtnStyle()}>Review & fix →</button>
               </div>
             </div>
 
@@ -2572,6 +2701,27 @@ function PersonaHintPanel() {
   );
 }
 
+function AudienceGroupHintPanel() {
+  return (
+    <div style={{
+      border: `1px dashed ${C.line}`,
+      borderRadius: 10,
+      background: C.bg,
+      padding: "10px 12px",
+      marginBottom: 2,
+    }}>
+      <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".06em", textTransform: "uppercase", marginBottom: 6 }}>
+        What to include
+      </div>
+      <div style={{ display: "grid", gap: 6, fontSize: 12, color: C.ink2, lineHeight: 1.45 }}>
+        <div><strong>Group name:</strong> generation + mindset + context (e.g. "Price-sensitive Gen Z commuters").</div>
+        <div><strong>Summary:</strong> how they react to claims, tone, pricing, and trust signals.</div>
+        <div><strong>Traits:</strong> 3 short descriptors, comma-separated (e.g. skeptical, vocal, practical).</div>
+      </div>
+    </div>
+  );
+}
+
 function EmptyState({ onAction }: { onAction: () => void }) {
   return (
     <div style={{
@@ -2579,7 +2729,7 @@ function EmptyState({ onAction }: { onAction: () => void }) {
       padding: 40, textAlign: "center",
     }}>
       <p style={{ color: C.muted, marginBottom: 16 }}>No simulation yet — run one to see results.</p>
-      <button onClick={onAction} style={primaryBtnStyle()}>Go to simulator</button>
+      <button onClick={onAction} style={progressBtnStyle()}>Go to simulator</button>
     </div>
   );
 }
@@ -2612,5 +2762,25 @@ function primaryBtnStyle(): React.CSSProperties {
     background: C.ink, color: C.accentInk, border: "none",
     padding: "12px 22px", borderRadius: 8,
     fontFamily: F.body, fontSize: 14, fontWeight: 600, cursor: "pointer",
+  };
+}
+
+function progressBtnStyle(): React.CSSProperties {
+  return {
+    background: "linear-gradient(135deg, #0A0A0A 0%, #1F2937 100%)",
+    color: C.accentInk,
+    border: "1px solid #111827",
+    padding: "12px 22px",
+    borderRadius: 8,
+    fontFamily: F.body,
+    fontSize: 14,
+    fontWeight: 700,
+    letterSpacing: ".01em",
+    cursor: "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    boxShadow: "0 8px 20px rgba(15,23,42,.22)",
   };
 }
