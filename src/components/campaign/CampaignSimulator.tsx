@@ -131,6 +131,54 @@ function riskBlurb(risk: SimulationResult["risk"]): string {
   return "High chance of backlash — rewrite before sending.";
 }
 
+function AiGenFeedback({
+  feedbackKey,
+  value,
+  onPick,
+  compact = false,
+}: {
+  feedbackKey: string;
+  value: "like" | "dislike" | undefined;
+  onPick: (key: string, choice: "like" | "dislike") => void;
+  compact?: boolean;
+}) {
+  const btn = (choice: "like" | "dislike") => {
+    const active = value === choice;
+    return (
+      <button
+        type="button"
+        aria-pressed={active}
+        aria-label={choice === "like" ? "Helpful — like this AI output" : "Not helpful — dislike this AI output"}
+        onClick={() => onPick(feedbackKey, choice)}
+        style={{
+          border: `1px solid ${active ? C.ink : C.line}`,
+          background: active ? C.ink : C.surface,
+          color: active ? C.accentInk : C.muted,
+          borderRadius: 6,
+          padding: compact ? "3px 8px" : "4px 10px",
+          fontSize: compact ? 12 : 13,
+          cursor: "pointer",
+          fontFamily: F.body,
+          fontWeight: 600,
+          lineHeight: 1,
+        }}
+      >
+        {choice === "like" ? "👍" : "👎"}
+      </button>
+    );
+  };
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", gap: compact ? 6 : 8, flexWrap: "wrap" }}>
+      {!compact && (
+        <span style={{ fontFamily: F.mono, fontSize: 9, color: C.faint, letterSpacing: ".07em", textTransform: "uppercase" }}>
+          Helpful?
+        </span>
+      )}
+      <div style={{ display: "inline-flex", gap: 6 }}>{btn("like")}{btn("dislike")}</div>
+    </div>
+  );
+}
+
 type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" | "positive" };
 const COMMENTS: Comment[] = [
   { id: 1, user: "@fitchecklane · 2m ago", text: '"SHEIN post again but no sizing proof on real bodies? Not buying the hype."', type: "negative" },
@@ -166,6 +214,7 @@ export default function CampaignSimulator() {
   const [appliedFixes, setAppliedFixes] = useState<Set<FieldKey>>(new Set());
   const [originalValues, setOriginalValues] = useState<Map<FieldKey, string>>(new Map());
   const [hoverFlag, setHoverFlag] = useState<FieldKey | null>(null);
+  const [aiGenFeedback, setAiGenFeedback] = useState<Record<string, "like" | "dislike">>({});
 
   const countdown = useCountdown(23 * 3600 + 59 * 60);
   const simulateFn = useServerFn(simulateCampaign);
@@ -184,6 +233,17 @@ export default function CampaignSimulator() {
     setScreen(n);
     setChaos(false);
     if (typeof window !== "undefined") window.scrollTo(0, 0);
+  };
+
+  const pickAiGenFeedback = (key: string, choice: "like" | "dislike") => {
+    setAiGenFeedback((prev) => {
+      if (prev[key] === choice) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: choice };
+    });
   };
 
   const launchCampaign = () => {
@@ -209,7 +269,10 @@ export default function CampaignSimulator() {
         waitMs(MIN_GENERATION_MS),
       ]);
       if (!response.ok) setSimError(response.error);
-      else setSimResult(response.data);
+      else {
+        setAiGenFeedback({});
+        setSimResult(response.data);
+      }
     } catch (e) {
       console.error(e);
       setSimError("Something went wrong. Please try again.");
@@ -759,11 +822,18 @@ export default function CampaignSimulator() {
                           Notification: Campaign marked as highly risky (score below 60%).
                         </div>
                       )}
-                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.lineSoft}` }}>
-                        <p style={{ flex: 1, minWidth: 220, fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
-                          {simResult.riskRationale}
-                        </p>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                      <div style={{ marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.lineSoft}` }}>
+                        <div style={{ display: "flex", alignItems: "flex-start", gap: 12, flexWrap: "wrap", justifyContent: "space-between" }}>
+                          <p style={{ flex: 1, minWidth: 220, fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
+                            {simResult.riskRationale}
+                          </p>
+                          <AiGenFeedback
+                            feedbackKey="sim:risk-rationale"
+                            value={aiGenFeedback["sim:risk-rationale"]}
+                            onPick={pickAiGenFeedback}
+                          />
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginTop: 8 }}>
                           {simResult.tones.map((t) => (
                             <span key={t} style={{
                               fontFamily: F.mono, fontSize: 11, color: C.ink,
@@ -805,18 +875,34 @@ export default function CampaignSimulator() {
                           <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.55 }}>
                             {simResult.overallCheck?.summary || "No summary available yet."}
                           </div>
+                          <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                            <AiGenFeedback
+                              feedbackKey="sim:overall-summary"
+                              value={aiGenFeedback["sim:overall-summary"]}
+                              onPick={pickAiGenFeedback}
+                            />
+                          </div>
                         </div>
                         <BriefListSection
                           title="Top Sensitive Risks"
                           items={simResult.overallCheck?.topSensitiveRisks || []}
+                          feedbackKey="sim:brief-top-risks"
+                          feedbackValue={aiGenFeedback["sim:brief-top-risks"]}
+                          onFeedbackPick={pickAiGenFeedback}
                         />
                         <BriefListSection
                           title="Failure Scenarios"
                           items={simResult.overallCheck?.failureScenarios || []}
+                          feedbackKey="sim:brief-failure"
+                          feedbackValue={aiGenFeedback["sim:brief-failure"]}
+                          onFeedbackPick={pickAiGenFeedback}
                         />
                         <BriefListSection
                           title="Recommended Guardrails"
                           items={simResult.overallCheck?.recommendedGuardrails || []}
+                          feedbackKey="sim:brief-guardrails"
+                          feedbackValue={aiGenFeedback["sim:brief-guardrails"]}
+                          onFeedbackPick={pickAiGenFeedback}
                         />
                         <div
                           style={{
@@ -876,6 +962,13 @@ export default function CampaignSimulator() {
                           <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, fontWeight: 600 }}>
                             {simResult.overallCheck?.overallVerdict || "No final verdict available yet."}
                           </div>
+                          <div style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                            <AiGenFeedback
+                              feedbackKey="sim:overall-verdict"
+                              value={aiGenFeedback["sim:overall-verdict"]}
+                              onPick={pickAiGenFeedback}
+                            />
+                          </div>
                         </div>
                       </div>
                     ) : (
@@ -895,7 +988,15 @@ export default function CampaignSimulator() {
                       </div>
                       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                         {customPersonas.map((p, i) => (
-                          <PersonaCard key={`custom-${i}`} persona={p} onRemove={() => removeCustomPersona(i)} customBadge />
+                          <PersonaCard
+                            key={`custom-${i}`}
+                            persona={p}
+                            onRemove={() => removeCustomPersona(i)}
+                            customBadge
+                            aiFeedbackKey={`sim:custom-persona:${i}`}
+                            aiFeedback={aiGenFeedback[`sim:custom-persona:${i}`]}
+                            onAiFeedbackPick={pickAiGenFeedback}
+                          />
                         ))}
                       </div>
                     </div>
@@ -1083,6 +1184,13 @@ export default function CampaignSimulator() {
                             <Stat label="Engagement" val="4.8%" tone="good" />
                             <Stat label="Sentiment" val="76% positive" tone="good" />
                             <Stat label="Backlash Risk" val="LOW" tone="good" pill />
+                            <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 12, paddingTop: 10, display: "flex", justifyContent: "flex-end" }}>
+                              <AiGenFeedback
+                                feedbackKey="results:improved-copy"
+                                value={aiGenFeedback["results:improved-copy"]}
+                                onPick={pickAiGenFeedback}
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1102,7 +1210,15 @@ export default function CampaignSimulator() {
                           Audience Segments
                         </div>
                         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                          {simResult.segments.map((s, i) => <SegmentCard key={`r-seg-${i}`} segment={s} />)}
+                          {simResult.segments.map((s, i) => (
+                            <SegmentCard
+                              key={`r-seg-${i}`}
+                              segment={s}
+                              aiFeedbackKey={`results:segment:${i}`}
+                              aiFeedback={aiGenFeedback[`results:segment:${i}`]}
+                              onAiFeedbackPick={pickAiGenFeedback}
+                            />
+                          ))}
                         </div>
                       </div>
                       {customPersonas.length > 0 && (
@@ -1111,7 +1227,17 @@ export default function CampaignSimulator() {
                             Your Custom Panelists
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                            {customPersonas.map((p, i) => <PersonaCard key={`r-c-${i}`} persona={p} onRemove={() => removeCustomPersona(i)} customBadge />)}
+                            {customPersonas.map((p, i) => (
+                              <PersonaCard
+                                key={`r-c-${i}`}
+                                persona={p}
+                                onRemove={() => removeCustomPersona(i)}
+                                customBadge
+                                aiFeedbackKey={`results:custom-persona:${i}`}
+                                aiFeedback={aiGenFeedback[`results:custom-persona:${i}`]}
+                                onAiFeedbackPick={pickAiGenFeedback}
+                              />
+                            ))}
                           </div>
                         </div>
                       )}
@@ -1615,10 +1741,10 @@ export default function CampaignSimulator() {
                     {[
                       ["🛡️", "Input validation", "Minimum-length check, content moderation API, profanity and harmful-content filters before any input reaches the model."],
                       ["📉", "Confidence thresholds", "If model confidence falls below 60%, the system returns \"insufficient signal\" instead of fabricated metrics."],
-                      ["🔁", "Fallback responses", "For ambiguous or out-of-domain inputs, the system surfaces a \"needs human review\" message rather than guessing."],
                       ["👥", "Human-in-the-loop", "Enterprise tier includes optional human review of edge-case simulations before they're delivered to customers."],
+                      ["🔁", "Fallback responses", "For ambiguous or out-of-domain inputs, the system surfaces a \"needs human review\" message rather than guessing."],
                     ].map(([icon, title, copy]) => (
-                      <div key={title} style={{ display: "grid", gridTemplateColumns: "22px 1fr", gap: 10, alignItems: "start" }}>
+                      <div key={title} style={{ display: "grid", gridTemplateColumns: "22px 1fr", gap: 10, alignItems: "start", opacity: title === "Fallback responses" ? 0.6 : 1 }}>
                         <div style={{ fontSize: 14, lineHeight: "20px" }}>{icon}</div>
                         <div>
                           <div style={{ fontSize: 13, color: C.ink2, fontWeight: 600, marginBottom: 2 }}>{title}</div>
@@ -1964,7 +2090,17 @@ function CampaignCarousel({
   );
 }
 
-function SegmentCard({ segment }: { segment: SimulationSegment }) {
+function SegmentCard({
+  segment,
+  aiFeedbackKey,
+  aiFeedback,
+  onAiFeedbackPick,
+}: {
+  segment: SimulationSegment;
+  aiFeedbackKey?: string;
+  aiFeedback?: "like" | "dislike";
+  onAiFeedbackPick?: (key: string, choice: "like" | "dislike") => void;
+}) {
   const tone = sentimentColor(segment.sentimentPct);
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
@@ -1987,11 +2123,25 @@ function SegmentCard({ segment }: { segment: SimulationSegment }) {
       <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5, fontStyle: "italic" }}>
         "{segment.topReaction}"
       </div>
+      {aiFeedbackKey && onAiFeedbackPick && (
+        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
+          <AiGenFeedback feedbackKey={aiFeedbackKey} value={aiFeedback} onPick={onAiFeedbackPick} />
+        </div>
+      )}
     </div>
   );
 }
 
-function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onRemove?: () => void; customBadge?: boolean }) {
+function PersonaCard({
+  persona, onRemove, customBadge, aiFeedbackKey, aiFeedback, onAiFeedbackPick,
+}: {
+  persona: Persona;
+  onRemove?: () => void;
+  customBadge?: boolean;
+  aiFeedbackKey?: string;
+  aiFeedback?: "like" | "dislike";
+  onAiFeedbackPick?: (key: string, choice: "like" | "dislike") => void;
+}) {
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, marginBottom: 8 }}>
@@ -2028,6 +2178,11 @@ function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onR
         {sentimentLabel(persona.sentiment)}
       </div>
       <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5, fontStyle: "italic" }}>"{persona.quote}"</div>
+      {aiFeedbackKey && onAiFeedbackPick && (
+        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
+          <AiGenFeedback feedbackKey={aiFeedbackKey} value={aiFeedback} onPick={onAiFeedbackPick} />
+        </div>
+      )}
     </div>
   );
 }
@@ -2075,8 +2230,20 @@ function FocusGroupScreen({
   const exportPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [snapshotPreviewOpen, setSnapshotPreviewOpen] = useState(false);
   const [snapshotJson, setSnapshotJson] = useState("");
+  const [fgAiFeedback, setFgAiFeedback] = useState<Record<string, "like" | "dislike">>({});
   const [recentlyDeletedGroup, setRecentlyDeletedGroup] = useState<{ group: PersonaGroup; index: number } | null>(null);
   const groupUndoTimeoutRef = useRef<number | null>(null);
+
+  const pickFgAiFeedback = (key: string, choice: "like" | "dislike") => {
+    setFgAiFeedback((prev) => {
+      if (prev[key] === choice) {
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      }
+      return { ...prev, [key]: choice };
+    });
+  };
 
   const baseGroups = useMemo<PersonaGroup[]>(() => {
     if (!simResult) return [];
@@ -2327,6 +2494,7 @@ function FocusGroupScreen({
 
   const runFocusGroupAnalysis = () => {
     if (generatingFocusGroup) return;
+    setFgAiFeedback({});
     setGeneratingFocusGroup(true);
     const complete = () => {
       const generated: GeneratedEntry[] = [];
@@ -2367,6 +2535,7 @@ function FocusGroupScreen({
 
   const upgradeToInDepthDiscussion = () => {
     if (feedbackDepth === "in-depth" || generatingFocusGroup) return;
+    setFgAiFeedback({});
     setGeneratingFocusGroup(true);
     const complete = () => {
       setFeedbackDepth("in-depth");
@@ -2639,6 +2808,16 @@ function FocusGroupScreen({
                                 opacity: totalParticipants >= MAX_FOCUS_GROUP_PARTICIPANTS ? 0.45 : 1,
                               }}>+</button>
                           </div>
+                        </div>
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ marginTop: 10, display: "flex", justifyContent: "flex-end" }}
+                        >
+                          <AiGenFeedback
+                            feedbackKey={`fg:setup-group:${g.id}`}
+                            value={fgAiFeedback[`fg:setup-group:${g.id}`]}
+                            onPick={pickFgAiFeedback}
+                          />
                         </div>
                       </div>
                     ))}
@@ -3053,6 +3232,8 @@ function FocusGroupScreen({
                 insights={simResult.insights}
                 avg={avg}
                 risk={simResult.risk}
+                aiFeedback={fgAiFeedback}
+                onAiFeedbackPick={pickFgAiFeedback}
               />
             )}
 
@@ -3069,13 +3250,19 @@ function FocusGroupScreen({
                     {transcript.map((line, i) => {
                       if (line.type === "moderator") {
                         return (
-                          <div key={i} style={{ display: "flex", justifyContent: "center" }}>
+                          <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
                             <div style={{
                               background: C.bg, border: `1px dashed ${C.line}`, borderRadius: 10,
                               padding: "8px 14px", fontFamily: F.mono, fontSize: 11,
                               color: C.muted, fontStyle: "italic", maxWidth: "70%", textAlign: "center",
                               letterSpacing: ".02em",
                             }}>📋 {line.text}</div>
+                            <AiGenFeedback
+                              compact
+                              feedbackKey={`fg:transcript-mod:${i}`}
+                              value={fgAiFeedback[`fg:transcript-mod:${i}`]}
+                              onPick={pickFgAiFeedback}
+                            />
                           </div>
                         );
                       }
@@ -3108,6 +3295,14 @@ function FocusGroupScreen({
                             color: isLeft ? C.ink : C.accentInk,
                             border: isLeft ? `1px solid ${C.line}` : "none",
                           }}>{line.text}</div>
+                          <div style={{ alignSelf: isLeft ? "flex-start" : "flex-end", maxWidth: "82%" }}>
+                            <AiGenFeedback
+                              compact
+                              feedbackKey={`fg:transcript:${i}`}
+                              value={fgAiFeedback[`fg:transcript:${i}`]}
+                              onPick={pickFgAiFeedback}
+                            />
+                          </div>
                         </div>
                       );
                     })}
@@ -3155,6 +3350,14 @@ function FocusGroupScreen({
                           <div style={{ fontFamily: F.mono, fontSize: 10, color: tone, fontWeight: 600, marginTop: 4, letterSpacing: ".04em" }}>
                             {sentimentLabel(persona.sentiment)}
                           </div>
+                          <div style={{ marginTop: 8, display: "flex", justifyContent: "flex-end" }}>
+                            <AiGenFeedback
+                              compact
+                              feedbackKey={`fg:panel:${i}`}
+                              value={fgAiFeedback[`fg:panel:${i}`]}
+                              onPick={pickFgAiFeedback}
+                            />
+                          </div>
                         </div>
                       );
                     })}
@@ -3171,6 +3374,9 @@ function FocusGroupScreen({
                     persona={persona}
                     custom={custom}
                     index={i}
+                    aiFeedbackKey={`fg:persona:${i}`}
+                    aiFeedback={fgAiFeedback[`fg:persona:${i}`]}
+                    onAiFeedbackPick={pickFgAiFeedback}
                   />
                 ))}
               </div>
@@ -3277,12 +3483,21 @@ function FocusGroupScreen({
   );
 }
 
+const CONCLUSION_FEEDBACK_KEYS: Record<string, string> = {
+  "What Works": "fg:conclusion:whatworks",
+  "What Doesn't": "fg:conclusion:whatdoesnt",
+  "Opportunities": "fg:conclusion:opportunities",
+  "Suggested Tweaks": "fg:conclusion:tweaks",
+};
+
 function ConclusionTab({
-  insights, avg, risk,
+  insights, avg, risk, aiFeedback, onAiFeedbackPick,
 }: {
   insights: SimulationInsights;
   avg: number;
   risk: SimulationResult["risk"];
+  aiFeedback?: Record<string, "like" | "dislike">;
+  onAiFeedbackPick?: (key: string, choice: "like" | "dislike") => void;
 }) {
   const sentLabel = sentimentLabel(avg);
   const sentColor = sentimentColor(avg);
@@ -3316,32 +3531,40 @@ function ConclusionTab({
   return (
     <div style={{ display: "grid", gap: 14 }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-        {sections.map((s) => (
-          <div key={s.title} style={{
-            background: s.toneSoft, border: `1px solid ${s.border}`,
-            borderRadius: 12, padding: 18,
-          }}>
-            <div style={{
-              fontFamily: F.mono, fontSize: 11, fontWeight: 700,
-              color: s.tone, letterSpacing: ".06em", textTransform: "uppercase",
-              marginBottom: 12,
+        {sections.map((s) => {
+          const fbKey = CONCLUSION_FEEDBACK_KEYS[s.title];
+          return (
+            <div key={s.title} style={{
+              background: s.toneSoft, border: `1px solid ${s.border}`,
+              borderRadius: 12, padding: 18,
             }}>
-              {s.title}
+              <div style={{
+                fontFamily: F.mono, fontSize: 11, fontWeight: 700,
+                color: s.tone, letterSpacing: ".06em", textTransform: "uppercase",
+                marginBottom: 12,
+              }}>
+                {s.title}
+              </div>
+              {s.items.length === 0 ? (
+                <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Nothing to flag here.</div>
+              ) : (
+                <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+                  {s.items.map((item, i) => (
+                    <li key={i} style={{ display: "flex", gap: 8, fontSize: 13, lineHeight: 1.55, color: C.ink }}>
+                      <span style={{ color: s.tone, fontWeight: 700, flexShrink: 0 }}>→</span>
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {fbKey && onAiFeedbackPick && (
+                <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+                  <AiGenFeedback feedbackKey={fbKey} value={aiFeedback?.[fbKey]} onPick={onAiFeedbackPick} />
+                </div>
+              )}
             </div>
-            {s.items.length === 0 ? (
-              <div style={{ fontSize: 12, color: C.muted, fontStyle: "italic" }}>Nothing to flag here.</div>
-            ) : (
-              <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
-                {s.items.map((item, i) => (
-                  <li key={i} style={{ display: "flex", gap: 8, fontSize: 13, lineHeight: 1.55, color: C.ink }}>
-                    <span style={{ color: s.tone, fontWeight: 700, flexShrink: 0 }}>→</span>
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {insights.predictedPerformance && (
@@ -3389,13 +3612,32 @@ function ConclusionTab({
               </div>
             </div>
           </div>
+          {onAiFeedbackPick && (
+            <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+              <AiGenFeedback
+                feedbackKey="fg:conclusion:predicted"
+                value={aiFeedback?.["fg:conclusion:predicted"]}
+                onPick={onAiFeedbackPick}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function FocusPersonaCard({ persona, custom, index, onRemove }: { persona: Persona; custom: boolean; index: number; onRemove?: () => void }) {
+function FocusPersonaCard({
+  persona, custom, index, onRemove, aiFeedbackKey, aiFeedback, onAiFeedbackPick,
+}: {
+  persona: Persona;
+  custom: boolean;
+  index: number;
+  onRemove?: () => void;
+  aiFeedbackKey?: string;
+  aiFeedback?: "like" | "dislike";
+  onAiFeedbackPick?: (key: string, choice: "like" | "dislike") => void;
+}) {
   const tone = sentimentColor(persona.sentiment);
   const label = sentimentLabel(persona.sentiment);
   const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
@@ -3463,6 +3705,11 @@ function FocusPersonaCard({ persona, custom, index, onRemove }: { persona: Perso
           <div style={{ height: "100%", background: tone, width: `${persona.sentiment}%`, borderRadius: 3 }} />
         </div>
       </div>
+      {aiFeedbackKey && onAiFeedbackPick && (
+        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 14, paddingTop: 10, display: "flex", justifyContent: "flex-end" }}>
+          <AiGenFeedback feedbackKey={aiFeedbackKey} value={aiFeedback} onPick={onAiFeedbackPick} />
+        </div>
+      )}
     </div>
   );
 }
@@ -3532,7 +3779,15 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function BriefListSection({ title, items }: { title: string; items: string[] }) {
+function BriefListSection({
+  title, items, feedbackKey, feedbackValue, onFeedbackPick,
+}: {
+  title: string;
+  items: string[];
+  feedbackKey?: string;
+  feedbackValue?: "like" | "dislike";
+  onFeedbackPick?: (key: string, choice: "like" | "dislike") => void;
+}) {
   return (
     <div style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12 }}>
       <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
@@ -3549,6 +3804,11 @@ function BriefListSection({ title, items }: { title: string; items: string[] }) 
       ) : (
         <div style={{ fontSize: 12, color: C.faint }}>
           No items provided.
+        </div>
+      )}
+      {feedbackKey && onFeedbackPick && (
+        <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, display: "flex", justifyContent: "flex-end" }}>
+          <AiGenFeedback feedbackKey={feedbackKey} value={feedbackValue} onPick={onFeedbackPick} />
         </div>
       )}
     </div>
