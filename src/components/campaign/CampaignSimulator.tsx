@@ -3,13 +3,12 @@ import { useServerFn } from "@tanstack/react-start";
 import {
   simulateCampaign,
   scorePersona,
-  PERSONA_ANCHORS,
   type SimulationResult,
+  type SimulationSegment,
   type CampaignPlan,
   type FieldKey,
   type FieldFlag,
   type Persona,
-  type PersonaAnchor,
 } from "@/utils/simulate.functions";
 
 /* ===========================================================
@@ -93,6 +92,19 @@ function useCountdown(start: number) {
 const sevColor = (sev: FieldFlag["severity"]) =>
   sev === "high" ? C.bad : sev === "medium" ? C.warn : C.muted;
 
+/* Descriptive sentiment bands — replaces raw percentages in the UI. */
+function sentimentLabel(score: number): string {
+  if (score >= 85) return "Enthusiastic";
+  if (score >= 70) return "Engaged";
+  if (score >= 55) return "Excited but skeptical";
+  if (score >= 40) return "Cautiously curious";
+  if (score >= 25) return "Skeptical";
+  return "Hostile";
+}
+function sentimentColor(score: number): string {
+  return score >= 60 ? C.good : score >= 40 ? C.warn : C.bad;
+}
+
 type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" };
 const COMMENTS: Comment[] = [
   { id: 1, user: "@_realconsumer · 2m ago", text: '"This feels like greenwashing. Zero specifics, just vibes. 🙄"', type: "negative" },
@@ -113,7 +125,8 @@ export default function CampaignSimulator() {
 
   const [plan, setPlan] = useState<CampaignPlan>(DEFAULT_PLAN);
   const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
-  const [draftAnchor, setDraftAnchor] = useState<PersonaAnchor>({ vals: "", pew: "", generation: "", notes: "" });
+  const [draftDescription, setDraftDescription] = useState("");
+  const [hintsOpen, setHintsOpen] = useState(false);
   const [scoringPersona, setScoringPersona] = useState(false);
   const [personaError, setPersonaError] = useState<string | null>(null);
 
@@ -171,19 +184,18 @@ export default function CampaignSimulator() {
     setAppliedFixes((prev) => new Set(prev).add(flag.field));
   };
 
-  const draftAnchorReady =
-    !!(draftAnchor.vals || draftAnchor.pew || draftAnchor.generation) && !!draftAnchor.notes.trim();
+  const draftReady = draftDescription.trim().length >= 3;
 
   const addCustomPersona = async () => {
     setPersonaError(null);
     setScoringPersona(true);
     try {
-      const res = await scorePersonaFn({ data: { anchor: draftAnchor, copy: plan.copy } });
+      const res = await scorePersonaFn({ data: { description: draftDescription, copy: plan.copy } });
       if (!res.ok) {
         setPersonaError(res.error);
       } else {
         setCustomPersonas((prev) => [...prev, res.persona]);
-        setDraftAnchor({ vals: "", pew: "", generation: "", notes: "" });
+        setDraftDescription("");
       }
     } catch (e) {
       console.error(e);
@@ -463,64 +475,95 @@ export default function CampaignSimulator() {
                   onSeeResults={() => goTo(5)}
                 />
 
-                {/* RIGHT — Personas */}
+                {/* RIGHT — Audience segments + custom personas */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                   <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
                     <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6 }}>
-                      VALS-Based Personas
+                      VALS Audience Segments
                     </div>
                     <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 14 }}>
-                      {simResult ? "Generated from your audience using Values & Lifestyles." : "Run a simulation to generate VALS personas."}
+                      {simResult
+                        ? "Three broad audience groups — derived from Values & Lifestyles + generation."
+                        : "Run a simulation to surface the audience segments most affected by your copy."}
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {(simResult?.personas ?? []).map((p, i) => (
-                        <PersonaCard key={`ai-${i}`} persona={p} />
+                      {(simResult?.segments ?? []).map((s, i) => (
+                        <SegmentCard key={`seg-${i}`} segment={s} />
                       ))}
                       {!simResult && (
                         <div style={{
                           border: `1px dashed ${C.line}`, borderRadius: 10, padding: 16,
                           textAlign: "center", color: C.faint, fontSize: 12,
                         }}>
-                          No personas yet.
+                          No segments yet.
                         </div>
                       )}
-                      {customPersonas.map((p, i) => (
-                        <PersonaCard key={`custom-${i}`} persona={p} onRemove={() => removeCustomPersona(i)} customBadge />
-                      ))}
                     </div>
                   </div>
 
+                  {customPersonas.length > 0 && (
+                    <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 14 }}>
+                        Your Custom Panelists
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                        {customPersonas.map((p, i) => (
+                          <PersonaCard key={`custom-${i}`} persona={p} onRemove={() => removeCustomPersona(i)} customBadge />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Custom persona builder */}
                   <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
-                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
-                      Build a Custom Persona
-                    </div>
-                    <p style={{ fontSize: 11, color: C.faint, lineHeight: 1.5, marginBottom: 14 }}>
-                      Anchor in VALS, Pew typology, and generational research.
-                    </p>
-                    <div style={{ display: "grid", gap: 10 }}>
-                      <AnchorSelect label="VALS" value={draftAnchor.vals} options={PERSONA_ANCHORS.vals} onChange={(v) => setDraftAnchor((d) => ({ ...d, vals: v as PersonaAnchor["vals"] }))} />
-                      <AnchorSelect label="Pew typology" value={draftAnchor.pew} options={PERSONA_ANCHORS.pew} onChange={(v) => setDraftAnchor((d) => ({ ...d, pew: v as PersonaAnchor["pew"] }))} />
-                      <AnchorSelect label="Generation" value={draftAnchor.generation} options={PERSONA_ANCHORS.generations} onChange={(v) => setDraftAnchor((d) => ({ ...d, generation: v as PersonaAnchor["generation"] }))} />
-                      <div>
-                        <MiniLabel>Lifestyle / interests</MiniLabel>
-                        <textarea
-                          value={draftAnchor.notes}
-                          onChange={(e) => setDraftAnchor((d) => ({ ...d, notes: e.target.value }))}
-                          rows={2}
-                          placeholder="e.g. Urban, fashion-conscious, distrusts greenwashing"
-                          style={inputStyle(false)}
-                        />
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
+                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
+                        Build a Custom Persona
                       </div>
                       <button
-                        onClick={addCustomPersona}
-                        disabled={!draftAnchorReady || scoringPersona}
+                        onClick={() => setHintsOpen((v) => !v)}
+                        aria-expanded={hintsOpen}
                         style={{
-                          background: !draftAnchorReady || scoringPersona ? C.lineSoft : C.ink,
-                          color: !draftAnchorReady || scoringPersona ? C.faint : C.accentInk,
+                          display: "inline-flex", alignItems: "center", gap: 6,
+                          background: hintsOpen ? C.ink : "transparent",
+                          color: hintsOpen ? C.accentInk : C.muted,
+                          border: `1px solid ${hintsOpen ? C.ink : C.line}`,
+                          borderRadius: 999, padding: "3px 10px",
+                          fontFamily: F.mono, fontSize: 10, fontWeight: 600,
+                          letterSpacing: ".05em", cursor: "pointer",
+                        }}>
+                        <span style={{
+                          width: 14, height: 14, borderRadius: "50%",
+                          background: hintsOpen ? "rgba(255,255,255,.18)" : C.lineSoft,
+                          display: "inline-flex", alignItems: "center", justifyContent: "center",
+                          fontSize: 10, fontWeight: 700,
+                        }}>?</span>
+                        {hintsOpen ? "HIDE HINTS" : "HINTS"}
+                      </button>
+                    </div>
+                    <p style={{ fontSize: 11, color: C.faint, lineHeight: 1.5, marginBottom: 12 }}>
+                      Describe a synthetic panelist in your own words — they'll be added to your panel just like the AI-generated ones.
+                    </p>
+
+                    {hintsOpen && <PersonaHintPanel />}
+
+                    <div style={{ display: "grid", gap: 10 }}>
+                      <textarea
+                        value={draftDescription}
+                        onChange={(e) => setDraftDescription(e.target.value)}
+                        rows={5}
+                        placeholder="e.g. Mid-30s urban renter, sustainability-minded but price-sensitive, watches a lot of YouTube, doesn't trust greenwashing claims."
+                        style={inputStyle(false)}
+                      />
+                      <button
+                        onClick={addCustomPersona}
+                        disabled={!draftReady || scoringPersona}
+                        style={{
+                          background: !draftReady || scoringPersona ? C.lineSoft : C.ink,
+                          color: !draftReady || scoringPersona ? C.faint : C.accentInk,
                           border: "none", padding: "11px 16px", borderRadius: 8,
                           fontFamily: F.body, fontSize: 13, fontWeight: 600,
-                          cursor: !draftAnchorReady || scoringPersona ? "default" : "pointer",
+                          cursor: !draftReady || scoringPersona ? "default" : "pointer",
                           display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
                         }}>
                         {scoringPersona ? (
@@ -540,20 +583,23 @@ export default function CampaignSimulator() {
                 <div style={{ marginTop: 32, display: "grid", gap: 18 }} className="fadeIn">
                   <SectionHeader>Audience Sentiment</SectionHeader>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
-                    {simResult.segments.map((seg) => (
-                      <div key={seg.name} style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 18 }}>
-                        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8 }}>VALS Segment</div>
-                        <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, marginBottom: 12, letterSpacing: "-0.01em" }}>{seg.name}</div>
-                        <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
+                    {simResult.segments.map((seg) => {
+                      const tone = sentimentColor(seg.sentimentPct);
+                      return (
+                        <div key={seg.name} style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 18 }}>
+                          <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8 }}>VALS Segment</div>
+                          <div style={{ fontFamily: F.display, fontSize: 15, fontWeight: 600, marginBottom: 12, letterSpacing: "-0.01em" }}>{seg.name}</div>
+                          <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
+                            <div style={{ height: "100%", width: `${seg.sentimentPct}%`, background: tone }} />
+                          </div>
                           <div style={{
-                            height: "100%", width: `${seg.sentimentPct}%`,
-                            background: seg.sentimentPct >= 60 ? C.good : seg.sentimentPct >= 40 ? C.warn : C.bad,
-                          }} />
+                            fontFamily: F.display, fontSize: 22, fontWeight: 700,
+                            marginBottom: 10, letterSpacing: "-0.01em", color: tone,
+                          }}>{sentimentLabel(seg.sentimentPct)}</div>
+                          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>"{seg.topReaction}"</div>
                         </div>
-                        <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, marginBottom: 10, letterSpacing: "-0.01em" }}>{seg.sentimentPct}% positive</div>
-                        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5 }}>"{seg.topReaction}"</div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   <SectionHeader>Emotional Tone Analysis</SectionHeader>
@@ -723,15 +769,26 @@ export default function CampaignSimulator() {
                       </div>
                     </div>
 
-                    {/* RIGHT — VALS personas (mirroring Simulate page structure) */}
-                    <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
-                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 14 }}>
-                        VALS Personas
+                    {/* RIGHT — VALS audience segments (mirroring Simulate page structure) */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                      <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                        <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 14 }}>
+                          VALS Audience Segments
+                        </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                          {simResult.segments.map((s, i) => <SegmentCard key={`r-seg-${i}`} segment={s} />)}
+                        </div>
                       </div>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                        {simResult.personas.map((p, i) => <PersonaCard key={`r-${i}`} persona={p} />)}
-                        {customPersonas.map((p, i) => <PersonaCard key={`r-c-${i}`} persona={p} customBadge />)}
-                      </div>
+                      {customPersonas.length > 0 && (
+                        <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                          <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 14 }}>
+                            Your Custom Panelists
+                          </div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                            {customPersonas.map((p, i) => <PersonaCard key={`r-c-${i}`} persona={p} customBadge />)}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -943,6 +1000,33 @@ function CampaignCarousel({
   );
 }
 
+function SegmentCard({ segment }: { segment: SimulationSegment }) {
+  const tone = sentimentColor(segment.sentimentPct);
+  return (
+    <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
+      <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>
+        VALS Segment
+      </div>
+      <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 10 }}>
+        {segment.name}
+      </div>
+      <div style={{ height: 3, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
+        <div style={{ height: "100%", width: `${segment.sentimentPct}%`, background: tone }} />
+      </div>
+      <div style={{
+        display: "inline-block",
+        fontFamily: F.mono, fontSize: 10, fontWeight: 600, color: tone,
+        letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 8,
+      }}>
+        {sentimentLabel(segment.sentimentPct)}
+      </div>
+      <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5, fontStyle: "italic" }}>
+        "{segment.topReaction}"
+      </div>
+    </div>
+  );
+}
+
 function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onRemove?: () => void; customBadge?: boolean }) {
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
@@ -966,11 +1050,15 @@ function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onR
       <div style={{ height: 3, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 8 }}>
         <div style={{
           height: "100%", width: `${persona.sentiment}%`,
-          background: persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad,
+          background: sentimentColor(persona.sentiment),
         }} />
       </div>
-      <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".05em", marginBottom: 6 }}>
-        SENTIMENT {persona.sentiment}%
+      <div style={{
+        fontFamily: F.mono, fontSize: 10, fontWeight: 600,
+        color: sentimentColor(persona.sentiment),
+        letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 6,
+      }}>
+        {sentimentLabel(persona.sentiment)}
       </div>
       <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5, fontStyle: "italic" }}>"{persona.quote}"</div>
     </div>
@@ -1017,7 +1105,7 @@ function FocusGroupScreen({
               display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
             }}>
               <div style={{ display: "flex", gap: 28, flexShrink: 0 }}>
-                <SummaryStat label="Avg sentiment" val={`${avg}%`} tone={avg >= 60 ? "good" : avg >= 40 ? "warn" : "bad"} />
+                <SummaryStat label="Mood" val={sentimentLabel(avg)} tone={avg >= 60 ? "good" : avg >= 40 ? "warn" : "bad"} />
                 <SummaryStat label="Participants" val={`${allPersonas.length}`} />
                 <SummaryStat label="Exchanges" val={`${transcript.length}`} />
                 <SummaryStat label="Risk band" val={simResult.risk} tone={simResult.risk === "LOW" ? "good" : simResult.risk === "MEDIUM" ? "warn" : "bad"} />
@@ -1140,7 +1228,9 @@ function FocusGroupScreen({
                           <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden" }}>
                             <div style={{ height: "100%", width: `${persona.sentiment}%`, background: tone, borderRadius: 2 }} />
                           </div>
-                          <div style={{ fontFamily: F.mono, fontSize: 10, color: tone, fontWeight: 600, marginTop: 4 }}>{persona.sentiment}% sentiment</div>
+                          <div style={{ fontFamily: F.mono, fontSize: 10, color: tone, fontWeight: 600, marginTop: 4, letterSpacing: ".04em" }}>
+                            {sentimentLabel(persona.sentiment)}
+                          </div>
                         </div>
                       );
                     })}
@@ -1164,9 +1254,9 @@ function FocusGroupScreen({
 }
 
 function FocusPersonaCard({ persona, custom, index }: { persona: Persona; custom: boolean; index: number }) {
-  const tone = persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad;
+  const tone = sentimentColor(persona.sentiment);
   const toneSoft = persona.sentiment >= 60 ? C.goodSoft : persona.sentiment >= 40 ? C.warnSoft : C.badSoft;
-  const label = persona.sentiment >= 60 ? "Positive" : persona.sentiment >= 40 ? "Mixed" : "Skeptical";
+  const label = sentimentLabel(persona.sentiment);
   const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
   return (
     <div style={{
@@ -1214,7 +1304,7 @@ function FocusPersonaCard({ persona, custom, index }: { persona: Persona; custom
       <div style={{ marginTop: 14 }}>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
           <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".07em", textTransform: "uppercase" }}>Sentiment</span>
-          <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 700, color: tone }}>{persona.sentiment}%</span>
+          <span style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: tone, letterSpacing: ".04em" }}>{label}</span>
         </div>
         <div style={{ height: 6, background: C.lineSoft, borderRadius: 3, overflow: "hidden" }}>
           <div style={{ height: "100%", background: tone, width: `${persona.sentiment}%`, borderRadius: 3 }} />
@@ -1226,10 +1316,16 @@ function FocusPersonaCard({ persona, custom, index }: { persona: Persona; custom
 
 function SummaryStat({ label, val, tone }: { label: string; val: string; tone?: "good" | "warn" | "bad" }) {
   const color = tone === "good" ? C.good : tone === "warn" ? C.warn : tone === "bad" ? C.bad : C.ink;
+  const isPhrase = val.includes(" ");
   return (
-    <div>
+    <div style={{ minWidth: 0 }}>
       <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
-      <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, color, letterSpacing: "-0.01em", lineHeight: 1 }}>{val}</div>
+      <div style={{
+        fontFamily: F.display,
+        fontSize: isPhrase ? 16 : 22,
+        fontWeight: 700, color, letterSpacing: "-0.01em", lineHeight: 1.15,
+        whiteSpace: "nowrap",
+      }}>{val}</div>
     </div>
   );
 }
@@ -1364,34 +1460,37 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-function MiniLabel({ children }: { children: React.ReactNode }) {
+function PersonaHintPanel() {
+  const groups: { label: string; items: string }[] = [
+    { label: "Demographics",   items: "age range, generation (Gen Z, Millennials, Gen X, Boomers), location, income bracket, occupation" },
+    { label: "Psychographics", items: "values, beliefs, political leanings, concerns, what they distrust or feel loyal to" },
+    { label: "Lifestyle",      items: "hobbies, media habits, brands they buy, how they shop, social-media platforms" },
+    { label: "VALS framework", items: "Innovators, Thinkers, Achievers, Experiencers, Believers, Strivers, Makers, Survivors" },
+    { label: "Pew typology",   items: "Progressive Left, Establishment Liberals, Stressed Sideliners, Populist Right, Faith and Flag Conservatives, etc." },
+  ];
   return (
-    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
-      {children}
-    </div>
-  );
-}
-
-function AnchorSelect({ label, value, options, onChange }: {
-  label: string;
-  value: string;
-  options: readonly string[];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div>
-      <MiniLabel>{label}</MiniLabel>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: "100%", border: `1px solid ${C.line}`, background: C.bg,
-          borderRadius: 8, padding: "10px 12px", fontFamily: F.body, fontSize: 13, color: C.ink,
-          appearance: "none",
-        }}>
-        <option value="">Select…</option>
-        {options.map((o) => <option key={o} value={o}>{o}</option>)}
-      </select>
+    <div style={{
+      background: C.bg, border: `1px solid ${C.line}`,
+      borderRadius: 10, padding: 12, marginBottom: 12,
+    }}>
+      <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 8 }}>
+        What's useful to mention
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        {groups.map((g) => (
+          <div key={g.label} style={{ display: "grid", gridTemplateColumns: "100px 1fr", gap: 10 }}>
+            <div style={{ fontFamily: F.mono, fontSize: 10, color: C.ink, fontWeight: 600, letterSpacing: ".04em" }}>
+              {g.label}
+            </div>
+            <div style={{ fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+              {g.items}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 11, color: C.faint, lineHeight: 1.5, marginTop: 10, fontStyle: "italic" }}>
+        You don't need to cover all of these — even a one-line vibe works. The AI will fill in the rest.
+      </div>
     </div>
   );
 }

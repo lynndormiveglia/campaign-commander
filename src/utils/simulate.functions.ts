@@ -45,13 +45,6 @@ export const PERSONA_ANCHORS = {
   ],
 } as const;
 
-export type PersonaAnchor = {
-  vals: typeof PERSONA_ANCHORS.vals[number] | "";
-  pew: typeof PERSONA_ANCHORS.pew[number] | "";
-  generation: typeof PERSONA_ANCHORS.generations[number] | "";
-  notes: string; // freeform descriptor (interests, lifestyle, location)
-};
-
 export type SimulationSegment = {
   name: string; // VALS-based segment label
   sentimentPct: number;
@@ -270,28 +263,24 @@ export type PersonaScoreResponse =
   | { ok: true; persona: Persona }
   | { ok: false; error: string };
 
-const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a custom audience persona built from three anchors — VALS (Values & Lifestyles), Pew political typology, and generational cohort — plus optional notes and the campaign copy, produce a realistic synthetic individual focus-group participant.
+const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a free-form description of a target audience member and the campaign copy, produce a realistic synthetic individual focus-group participant. Infer any missing details (VALS type, generation, occupation, etc.) from the description in a way that is consistent with what the user wrote.
 
 You MUST call the return_persona tool with:
 - name: a realistic first + last name (e.g. "Maya Patel", "Jordan Reeves") — NEVER a category label.
-- archetype: VALS type + one-line lifestyle descriptor.
-- age: generational range like "Millennials (29–44)".
+- archetype: VALS type + one-line lifestyle descriptor (infer the VALS type from the description).
+- age: generational range like "Millennials (29–44)" (inferred from description).
 - job: a realistic occupation (e.g. "High-school teacher", "Product manager").
 - traits: an array of EXACTLY 3 short adjectives describing personality.
 - sentiment: integer 0–100 (their predicted positive sentiment toward the campaign copy).
 - quote: ~120 chars in their personal voice reacting to the copy.`;
 
 export const scorePersona = createServerFn({ method: "POST" })
-  .inputValidator((data: { anchor: PersonaAnchor; copy: string }) => {
-    if (!data || !data.anchor) throw new Error("anchor is required");
-    const a = data.anchor;
+  .inputValidator((data: { description: string; copy: string }) => {
+    if (!data) throw new Error("description is required");
+    const description = String(data.description ?? "").trim();
+    if (description.length < 3) throw new Error("Persona description is too short.");
     return {
-      anchor: {
-        vals: String(a.vals ?? "").trim().slice(0, 60),
-        pew: String(a.pew ?? "").trim().slice(0, 60),
-        generation: String(a.generation ?? "").trim().slice(0, 60),
-        notes: String(a.notes ?? "").trim().slice(0, 500),
-      },
+      description: description.slice(0, 1000),
       copy: String(data.copy ?? "").trim().slice(0, 2000),
     };
   })
@@ -299,11 +288,8 @@ export const scorePersona = createServerFn({ method: "POST" })
     const apiKey = process.env.LOVABLE_API_KEY;
     if (!apiKey) return { ok: false, error: "AI is not configured. Please try again later." };
 
-    const userMsg = `Persona anchors:
-- VALS: ${data.anchor.vals || "(unspecified)"}
-- Pew typology: ${data.anchor.pew || "(unspecified)"}
-- Generation: ${data.anchor.generation || "(unspecified)"}
-- Notes: ${data.anchor.notes || "(none)"}
+    const userMsg = `Persona description (free-form, written by the marketer):
+${data.description}
 
 Campaign copy to react to:
 ${data.copy || "(no copy provided)"}`;
