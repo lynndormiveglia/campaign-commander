@@ -108,6 +108,34 @@ const sanitizeNoCjkArray = (value: unknown, limit: number) =>
         .map((item) => sanitizeNoCjk(String(item ?? "")))
         .filter(Boolean)
     : [];
+const MODEL_CANDIDATES = ["openai/gpt-5", "google/gemini-3-flash-preview"] as const;
+async function fetchLovableWithFallback(
+  apiKey: string,
+  payload: Record<string, unknown>,
+): Promise<{ res: Response; model: string; body: string }> {
+  let lastRes: Response | null = null;
+  let lastBody = "";
+  let lastModel: string = MODEL_CANDIDATES[0];
+  for (const model of MODEL_CANDIDATES) {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ ...payload, model }),
+    });
+    if (res.ok) return { res, model, body: "" };
+    const body = await res.text().catch(() => "");
+    if (res.status === 402 || res.status === 429) return { res, model, body };
+    lastRes = res;
+    lastBody = body;
+    lastModel = model;
+    console.warn(`Model ${model} failed (${res.status}), trying fallback if available.`);
+  }
+  if (!lastRes) throw new Error("No model response received.");
+  return { res: lastRes, model: lastModel, body: lastBody };
+}
 
 const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign. You may rely on standard consumer-segmentation thinking internally, but NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers", "Experiencers", "Believers", "Makers", "Survivors") in any user-facing output field. Use plain English consumers would recognize.
 
@@ -181,19 +209,12 @@ Campaign Copy:
 ${data.plan.copy}`;
 
     try {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "openai/gpt-5",
-          messages: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: userMsg },
-          ],
-          tools: [
+      const gateway = await fetchLovableWithFallback(apiKey, {
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userMsg },
+        ],
+        tools: [
             {
               type: "function",
               function: {
@@ -287,14 +308,13 @@ ${data.plan.copy}`;
             },
           ],
           tool_choice: { type: "function", function: { name: "return_simulation" } },
-        }),
       });
+      const res = gateway.res;
 
       if (!res.ok) {
         if (res.status === 429) return { ok: false, error: "Too many simulations right now — try again in a moment." };
         if (res.status === 402) return { ok: false, error: "AI credits exhausted. Add credits in Settings → Workspace → Usage." };
-        const body = await res.text().catch(() => "");
-        console.error("AI gateway error", res.status, body);
+        console.error("AI gateway error", res.status, gateway.body);
         return { ok: false, error: "Couldn't reach the simulator. Please try again." };
       }
 
@@ -437,16 +457,12 @@ Campaign copy to react to:
 ${data.copy || "(no copy provided)"}`;
 
     try {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "openai/gpt-5",
-          messages: [
-            { role: "system", content: PERSONA_SYSTEM },
-            { role: "user", content: userMsg },
-          ],
-          tools: [{
+      const gateway = await fetchLovableWithFallback(apiKey, {
+        messages: [
+          { role: "system", content: PERSONA_SYSTEM },
+          { role: "user", content: userMsg },
+        ],
+        tools: [{
             type: "function",
             function: {
               name: "return_persona",
@@ -470,11 +486,12 @@ ${data.copy || "(no copy provided)"}`;
             },
           }],
           tool_choice: { type: "function", function: { name: "return_persona" } },
-        }),
       });
+      const res = gateway.res;
       if (!res.ok) {
         if (res.status === 429) return { ok: false, error: "Too many requests — try again in a moment." };
         if (res.status === 402) return { ok: false, error: "AI credits exhausted." };
+        console.error("AI gateway error (persona)", res.status, gateway.body);
         return { ok: false, error: "Couldn't reach the analyzer. Please try again." };
       }
       const json = await res.json();
@@ -519,16 +536,12 @@ SOURCE TEXT:
 ${data.sourceText}`;
 
     try {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "openai/gpt-5",
-          messages: [
-            { role: "system", content: PLAN_EXTRACT_SYSTEM },
-            { role: "user", content: userMsg },
-          ],
-          tools: [{
+      const gateway = await fetchLovableWithFallback(apiKey, {
+        messages: [
+          { role: "system", content: PLAN_EXTRACT_SYSTEM },
+          { role: "user", content: userMsg },
+        ],
+        tools: [{
             type: "function",
             function: {
               name: "return_campaign_plan",
@@ -551,12 +564,13 @@ ${data.sourceText}`;
             },
           }],
           tool_choice: { type: "function", function: { name: "return_campaign_plan" } },
-        }),
       });
+      const res = gateway.res;
 
       if (!res.ok) {
         if (res.status === 429) return { ok: false, error: "Too many requests - try again in a moment." };
         if (res.status === 402) return { ok: false, error: "AI credits exhausted." };
+        console.error("AI gateway error (extract)", res.status, gateway.body);
         return { ok: false, error: "Couldn't analyze the uploaded file. Please try again." };
       }
 
