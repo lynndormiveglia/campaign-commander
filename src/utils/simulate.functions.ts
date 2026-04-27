@@ -64,10 +64,10 @@ export type SimulationInsights = {
 };
 
 export type SimulationOverallCheck = {
-  political: string;
-  cultural: string;
-  religious: string;
-  algorithmic: string;
+  summary: string;
+  topSensitiveRisks: string[];
+  failureScenarios: string[];
+  recommendedGuardrails: string[];
   overallVerdict: string;
 };
 
@@ -138,11 +138,11 @@ You MUST call the return_simulation tool. Rules:
   • opportunities: 2–3 bullet sentences with untapped angles or insights the campaign could lean into.
   • suggestedTweaks: 2–4 bullet sentences with specific, tactical changes (concrete edits, not generic advice).
   • predictedPerformance: a single short paragraph (~3 sentences) predicting how this campaign would actually perform once it ships — engagement quality, sentiment skew, likely community response.
-- overallCheck: an object with overall campaign-plan checks (not segmented by audience):
-  • political: political sensitivity / polarization risk check.
-  • cultural: cultural framing and cross-region interpretation check.
-  • religious: faith/cultural-belief sensitivity check.
-  • algorithmic: platform algorithm/distribution risk check.
+- overallCheck: an object with an OPEN-ENDED overall campaign-plan risk brief (not fixed categories). You decide the most sensitive angles for this specific campaign:
+  • summary: short contextual overview of the main risk landscape.
+  • topSensitiveRisks: 3-5 bullet-style strings naming the highest-risk pressure points.
+  • failureScenarios: 2-4 concrete "what could go wrong" scenarios.
+  • recommendedGuardrails: 3-5 practical safeguards/controls before launch.
   • overallVerdict: single plain-English verdict with highest-priority next step.`;
 
 export const simulateCampaign = createServerFn({ method: "POST" })
@@ -270,13 +270,13 @@ ${data.plan.copy}`;
                     overallCheck: {
                       type: "object",
                       properties: {
-                        political: { type: "string" },
-                        cultural: { type: "string" },
-                        religious: { type: "string" },
-                        algorithmic: { type: "string" },
+                        summary: { type: "string" },
+                        topSensitiveRisks: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
+                        failureScenarios: { type: "array", minItems: 2, maxItems: 4, items: { type: "string" } },
+                        recommendedGuardrails: { type: "array", minItems: 3, maxItems: 5, items: { type: "string" } },
                         overallVerdict: { type: "string" },
                       },
-                      required: ["political","cultural","religious","algorithmic","overallVerdict"],
+                      required: ["summary","topSensitiveRisks","failureScenarios","recommendedGuardrails","overallVerdict"],
                       additionalProperties: false,
                     },
                   },
@@ -339,10 +339,10 @@ ${data.plan.copy}`;
       };
       const rawOverall = (parsed as { overallCheck?: Partial<SimulationOverallCheck> }).overallCheck ?? {};
       const cleanedOverall: SimulationOverallCheck = {
-        political: sanitizeNoCjk(String(rawOverall.political ?? "")),
-        cultural: sanitizeNoCjk(String(rawOverall.cultural ?? "")),
-        religious: sanitizeNoCjk(String(rawOverall.religious ?? "")),
-        algorithmic: sanitizeNoCjk(String(rawOverall.algorithmic ?? "")),
+        summary: sanitizeNoCjk(String(rawOverall.summary ?? "")),
+        topSensitiveRisks: sanitizeNoCjkArray(rawOverall.topSensitiveRisks, 5),
+        failureScenarios: sanitizeNoCjkArray(rawOverall.failureScenarios, 4),
+        recommendedGuardrails: sanitizeNoCjkArray(rawOverall.recommendedGuardrails, 5),
         overallVerdict: sanitizeNoCjk(String(rawOverall.overallVerdict ?? "")),
       };
 

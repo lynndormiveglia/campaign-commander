@@ -154,7 +154,6 @@ export default function CampaignSimulator() {
   const [recentlyDeletedPersonas, setRecentlyDeletedPersonas] = useState<Array<{ persona: Persona; index: number }>>([]);
   const deleteUndoTimeoutRef = useRef<number | null>(null);
   const [draftDescription, setDraftDescription] = useState("");
-  const [hintsOpen, setHintsOpen] = useState(false);
   const [scoringPersona, setScoringPersona] = useState(false);
   const [personaError, setPersonaError] = useState<string | null>(null);
 
@@ -674,7 +673,7 @@ export default function CampaignSimulator() {
                     importingPlan={importingPlan}
                     importError={importPlanError}
                     onImportFile={importCampaignPlanFile}
-                    ctaLabel="Simulate Audience Reaction"
+                    ctaLabel="Run Overall Campaign Check"
                   />
 
                   {simResult && (
@@ -732,33 +731,89 @@ export default function CampaignSimulator() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                   <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
                     <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6 }}>
-                      Overall Campaign Plan Check
+                      Overall Campaign Risk Brief
                     </div>
                     <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 14 }}>
                       {simResult
-                        ? "AI-wide risk read across political, cultural, religious, and algorithmic factors."
-                        : "Run a simulation to generate an overall campaign-plan risk analysis."}
+                        ? "AI-generated open-ended diagnosis of the most sensitive failure points in this campaign plan."
+                        : "Run a simulation to generate an overall campaign risk brief."}
                     </p>
                     {simResult ? (
                       <div style={{ display: "grid", gap: 10 }}>
-                        {([
-                          ["Political", simResult.overallCheck?.political],
-                          ["Cultural", simResult.overallCheck?.cultural],
-                          ["Religious", simResult.overallCheck?.religious],
-                          ["Algorithmic", simResult.overallCheck?.algorithmic],
-                        ] as const).map(([label, text]) => (
-                          <div key={label} style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12 }}>
-                            <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
-                              {label}
-                            </div>
-                            <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5 }}>
-                              {text || "No major risk signal detected."}
-                            </div>
+                        <div style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12 }}>
+                          <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
+                            Summary
                           </div>
-                        ))}
-                        <div style={{ borderTop: `1px solid ${C.lineSoft}`, paddingTop: 10 }}>
+                          <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.55 }}>
+                            {simResult.overallCheck?.summary || "No summary available yet."}
+                          </div>
+                        </div>
+                        <BriefListSection
+                          title="Top Sensitive Risks"
+                          items={simResult.overallCheck?.topSensitiveRisks || []}
+                        />
+                        <BriefListSection
+                          title="Failure Scenarios"
+                          items={simResult.overallCheck?.failureScenarios || []}
+                        />
+                        <BriefListSection
+                          title="Recommended Guardrails"
+                          items={simResult.overallCheck?.recommendedGuardrails || []}
+                        />
+                        <div
+                          style={{
+                            borderTop: `1px solid ${C.lineSoft}`,
+                            paddingTop: 10,
+                            background:
+                              simResult.risk === "HIGH"
+                                ? C.badSoft
+                                : simResult.risk === "MEDIUM"
+                                  ? C.warnSoft
+                                  : C.goodSoft,
+                            border: `1px solid ${
+                              simResult.risk === "HIGH"
+                                ? "#FECACA"
+                                : simResult.risk === "MEDIUM"
+                                  ? "#FDE68A"
+                                  : "#BBF7D0"
+                            }`,
+                            borderLeft: `4px solid ${
+                              simResult.risk === "HIGH"
+                                ? C.bad
+                                : simResult.risk === "MEDIUM"
+                                  ? C.warn
+                                  : C.good
+                            }`,
+                            borderRadius: 10,
+                            padding: 12,
+                          }}
+                        >
                           <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
                             Overall Verdict
+                          </div>
+                          <div
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              marginBottom: 8,
+                              padding: "2px 8px",
+                              borderRadius: 999,
+                              fontFamily: F.mono,
+                              fontSize: 10,
+                              letterSpacing: ".06em",
+                              textTransform: "uppercase",
+                              fontWeight: 700,
+                              color:
+                                simResult.risk === "HIGH"
+                                  ? C.bad
+                                  : simResult.risk === "MEDIUM"
+                                    ? C.warn
+                                    : C.good,
+                              background: C.surface,
+                              border: `1px solid ${C.line}`,
+                            }}
+                          >
+                            {simResult.risk} Priority
                           </div>
                           <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, fontWeight: 600 }}>
                             {simResult.overallCheck?.overallVerdict || "No final verdict available yet."}
@@ -788,68 +843,6 @@ export default function CampaignSimulator() {
                     </div>
                   )}
 
-                  {/* Custom persona builder */}
-                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                      <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
-                        Build a Custom Persona
-                      </div>
-                      <button
-                        onClick={() => setHintsOpen((v) => !v)}
-                        aria-expanded={hintsOpen}
-                        aria-label={hintsOpen ? "Hide hints" : "Show hints"}
-                        title={hintsOpen ? "Hide hints" : "Show hints"}
-                        style={{
-                          display: "inline-flex", alignItems: "center",
-                          background: hintsOpen ? C.ink : "transparent",
-                          color: hintsOpen ? C.accentInk : C.muted,
-                          border: `1px solid ${hintsOpen ? C.ink : C.line}`,
-                          borderRadius: 999, padding: "3px",
-                          fontFamily: F.mono, fontSize: 10, fontWeight: 600,
-                          letterSpacing: ".05em", cursor: "pointer",
-                        }}>
-                        <span style={{
-                          width: 14, height: 14, borderRadius: "50%",
-                          background: hintsOpen ? "rgba(255,255,255,.18)" : C.lineSoft,
-                          display: "inline-flex", alignItems: "center", justifyContent: "center",
-                          fontSize: 10, fontWeight: 700,
-                        }}>?</span>
-                      </button>
-                    </div>
-                    <p style={{ fontSize: 11, color: C.faint, lineHeight: 1.5, marginBottom: 12 }}>
-                      Describe a slice of your audience in your own words — we'll turn it into a broad audience tag and add it to your panel.
-                    </p>
-
-                    {hintsOpen && <PersonaHintPanel />}
-
-                    <div style={{ display: "grid", gap: 10 }}>
-                      <textarea
-                        value={draftDescription}
-                        onChange={(e) => setDraftDescription(e.target.value)}
-                        rows={5}
-                        placeholder="e.g. Gen Z fashion deal hunters, heavy TikTok users, trend-first but skeptical about quality claims."
-                        style={inputStyle(false)}
-                      />
-                      <button
-                        onClick={addCustomPersona}
-                        disabled={!draftReady || scoringPersona}
-                        style={{
-                          background: !draftReady || scoringPersona ? C.lineSoft : C.ink,
-                          color: !draftReady || scoringPersona ? C.faint : C.accentInk,
-                          border: "none", padding: "11px 16px", borderRadius: 8,
-                          fontFamily: F.body, fontSize: 13, fontWeight: 600,
-                          cursor: !draftReady || scoringPersona ? "default" : "pointer",
-                          display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
-                        }}>
-                        {scoringPersona ? (
-                          <>Analyzing <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
-                        ) : "+ Add persona & analyze"}
-                      </button>
-                      {personaError && (
-                        <div style={{ fontFamily: F.mono, fontSize: 11, color: C.bad }}>⚠ {personaError}</div>
-                      )}
-                    </div>
-                  </div>
                 </div>
               </div>
 
@@ -2982,6 +2975,29 @@ function SummaryCell({ label, value }: { label: string; value: string }) {
       <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.4 }}>
         {value || "—"}
       </div>
+    </div>
+  );
+}
+
+function BriefListSection({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12 }}>
+      <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
+        {title}
+      </div>
+      {items.length ? (
+        <ul style={{ margin: 0, paddingLeft: 18, display: "grid", gap: 6 }}>
+          {items.map((item, i) => (
+            <li key={`${title}-${i}`} style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5 }}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div style={{ fontSize: 12, color: C.faint }}>
+          No items provided.
+        </div>
+      )}
     </div>
   );
 }
