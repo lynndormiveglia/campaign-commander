@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CampaignIQ — Demo</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <style>
+    html, body, #root { margin: 0; padding: 0; height: 100%; }
+    input[type=range] { -webkit-appearance:none; width:100%; height:4px; background:#E2E8F0; border-radius:2px; outline:none; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:15px; height:15px; border-radius:50%; background:#0F172A; cursor:pointer; border:2px solid #F8FAFC; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+    /* ─── existing data ─────────────────────────────────────── */
+    const COMMENTS = [
+      { id: 1, user: "@slowfashionera · 3m ago", text: '"SHEIN doing a Halloween campaign is giving landfill cosplay. Hard no. 🙄"', type: "negative" },
+      { id: 2, user: "@thriftqueen99 · 7m ago", text: '"Fast fashion + Halloween = the scariest thing I\'ve seen all October."', type: "negative" },
+      { id: 3, user: "@eco.not.ego · 14m ago", text: '"Spook-tacular deals on clothes that fall apart after one wear. Very on brand."', type: "negative" },
+      { id: 4, user: "@halloweenjunkie · 21m ago", text: '"ok but are the deals actually good or is this just hype? asking for my wallet 👻"', type: "neutral" },
+      { id: 5, user: "@fashionwatchdog · 29m ago", text: '"No labor disclosures, no material info. Just vibes and pumpkins. Pass."', type: "negative" },
+    ];
+
+    const SEGMENTS = [
+      { id: 1, icon: "🧑‍💻", iconBg: "#FEF9C3", name: "Gen Z", pct: 42, level: "low", reaction: 'Skeptical about authenticity — "Sounds like every other brand."', fix: "Use transparent sourcing language with real numbers and third-party verification." },
+      { id: 2, icon: "👨‍👩‍👧", iconBg: "#E0F2FE", name: "Parents", pct: 65, level: "mid", reaction: "Price sensitivity — sustainable often reads as expensive.", fix: "Emphasize long-term value and cost-per-use comparisons in the copy." },
+      { id: 3, icon: "🌿", iconBg: "#DCFCE7", name: "Sustainability Advocates", pct: 30, level: "low", reaction: "No proof — vague claims trigger high skepticism in this segment.", fix: "Add data, certifications, and supply-chain breakdown directly in the campaign." },
+    ];
+
+    function useCountdown(start) {
+      const [secs, setSecs] = useState(start);
+      useEffect(() => {
+        const t = setInterval(() => setSecs(s => (s > 0 ? s - 1 : 0)), 1000);
+        return () => clearInterval(t);
+      }, []);
+      const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+      return [h, m, s].map(n => String(n).padStart(2, "0"));
+    }
+
+    const S = {
+      blue: "#2563EB", blueLight: "#3B82F6", bluePale: "#EFF6FF",
+      red: "#EF4444", redPale: "#FEF2F2",
+      green: "#10B981", greenPale: "#ECFDF5", amber: "#F59E0B",
+      g50: "#F8FAFC", g100: "#F1F5F9", g200: "#E2E8F0",
+      g400: "#94A3B8", g500: "#64748B", g700: "#334155", g900: "#0F172A",
+    };
+
+    const PLAN_FIELDS = [
+      { key: "name", label: "Program Name", placeholder: "2024 SHEIN Halloween Deals" },
+      { key: "timeline", label: "Campaign Timeline", placeholder: "2024/9/16 – 2024/10/31" },
+      { key: "message", label: "Key Message", placeholder: "Spook-Tacular Deals Are Ready to Take Over Your Halloween — Shop at SHEIN with Amazing Offers" },
+      { key: "hashtag", label: "Hashtag", placeholder: "#SHEINHalloweenDeals" },
+      { key: "slogan", label: "Slogan", placeholder: "e.g. Slay the Season" },
+    ];
+
+    const PERSONAS_STATIC = [
+      { id: 0, icon: "✨", label: "Gen Z Fashion Lovers", iconBg: "#FEF9C3", emotion: "Excited but skeptical", emotionColor: "#92400E", emotionBg: "#FFFBEB", objection: '"Is this brand actually cool or just trend-chasing?"', comment: '"ok the aesthetic is giving but idk if I trust them lol 💀"', risk: "MEDIUM", riskColor: "#F59E0B", riskBg: "#FFFBEB", riskBar: 52 },
+      { id: 1, icon: "🌿", label: "Eco-Conscious Consumers", iconBg: "#DCFCE7", emotion: "Distrustful", emotionColor: "#991B1B", emotionBg: "#FEF2F2", objection: '"Fast fashion + Halloween = maximum landfill energy."', comment: '"No sustainability report, no third-party audit. Hard pass."', risk: "HIGH", riskColor: "#EF4444", riskBg: "#FEF2F2", riskBar: 88 },
+      { id: 2, icon: "🤨", label: "Sustainability Skeptics", iconBg: "#E0E7FF", emotion: "Indifferent", emotionColor: "#4338CA", emotionBg: "#EEF2FF", objection: '"Every brand does a Halloween sale. So what?"', comment: '"Cool deals I guess, but nothing here makes me switch from my usual."', risk: "LOW", riskColor: "#10B981", riskBg: "#ECFDF5", riskBar: 22 },
+      { id: 3, icon: "💸", label: "Price-Sensitive Shoppers", iconBg: "#E0F2FE", emotion: "Curious & motivated", emotionColor: "#0369A1", emotionBg: "#E0F2FE", objection: '"How deep are the discounts really?"', comment: '"If the deals are actually good I\'m buying 5 things tonight 🛒"', risk: "LOW", riskColor: "#10B981", riskBg: "#ECFDF5", riskBar: 18 },
+    ];
+
+    /* ─── focus group constants ─────────────────────────────── */
+    const FG_INTERESTS = ["Fashion","Tech","Gaming","Fitness","Cooking","Travel","Music","Art","Sports","Beauty","Parenting","Film"];
+    const FG_VALUES    = ["Sustainability","Luxury","Convenience","Authenticity","Community","Innovation","Health","Status","Creativity","Equality"];
+    const FG_TRAITS    = ["Skeptical","Trend-driven","Analytical","Impulsive","Practical","Bold","Empathetic","Cynical","Optimistic","Brand-loyal"];
+    const FG_MEDIA     = ["TikTok","Instagram","YouTube","Twitter/X","LinkedIn","Facebook","TV","Podcasts","Reddit","Twitch"];
+    const AVATAR_BG    = ["#FEF9C3","#E0F2FE","#DCFCE7","#E0E7FF","#FEE2E2","#F3E8FF","#FFF7ED","#ECFDF5"];
+    const AVATAR_EM    = ["👩","👨","🧑","👩🏽","👨🏾","🧑🏻","👩🏿","👨🏼"];
+
+    function TagPicker({ options, selected, onChange }) {
+      const toggle = o => onChange(selected.includes(o) ? selected.filter(s => s !== o) : [...selected, o]);
+      return (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+          {options.map(o => (
+            <span key={o} onClick={() => toggle(o)} style={{
+              padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, cursor: "pointer",
+              border: `1.5px solid ${selected.includes(o) ? S.g900 : S.g200}`,
+              background: selected.includes(o) ? S.g900 : "transparent",
+              color: selected.includes(o) ? "#fff" : S.g500,
+              transition: "all .15s",
+            }}>{o}</span>
+          ))}
+        </div>
+      );
+    }
+
+    /* ─── Screen 3 (Simulate) ───────────────────────────────── */
+    function Screen3({ S, simulating, showResults, showSegments, showAnalysis, showNextBtn, runSimulation, fillColor, goTo }) {
+      const [plan, setPlan] = useState({ name: "2024 SHEIN Halloween Deals", timeline: "2024/9/16 – 2024/10/31", message: "Spook-Tacular Deals Are Ready to Take Over Your Halloween — Shop at SHEIN with Amazing Offers", hashtag: "#SHEINHalloweenDeals", slogan: "Slay the Season" });
+      const [activePersona, setActivePersona] = useState(0);
+      const inputStyle = { width: "100%", border: `1.5px solid ${S.g200}`, borderRadius: 8, padding: "10px 13px", fontFamily: "system-ui, sans-serif", fontSize: 14, color: S.g900, lineHeight: 1.5, background: S.g50, outline: "none" };
+      const persona = PERSONAS_STATIC[activePersona];
+      return (
+        <div style={{ background: S.g50, minHeight: "calc(100vh - 56px)" }}>
+          <div style={{ maxWidth: 1020, margin: "0 auto", padding: "48px 28px" }} className="fadeIn">
+            <div style={{ marginBottom: 32 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: S.blue, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, background: S.blue, borderRadius: "50%", display: "inline-block", animation: "blink 1.4s ease-in-out infinite" }} />AI Pre-Testing Engine
+              </div>
+              <h2 style={{ fontFamily: "Georgia, serif", fontSize: 34, fontWeight: 800, marginBottom: 8 }}>Simulate Before You Launch</h2>
+              <p style={{ fontSize: 15, color: S.g500 }}>Fill in your campaign plan below. Our engine stress-tests it across real audience segments in seconds.</p>
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24, marginBottom: 24, alignItems: "start" }}>
+              <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: 28, boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: S.g700, marginBottom: 20, textTransform: "uppercase", letterSpacing: ".07em" }}>Campaign Plan</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  {PLAN_FIELDS.map(f => (
+                    <div key={f.key}>
+                      <label style={{ display: "block", fontSize: 11, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>{f.label}</label>
+                      {f.key === "message"
+                        ? <textarea rows={3} value={plan[f.key]} onChange={e => setPlan(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder} style={{ ...inputStyle, resize: "none" }} />
+                        : <input type="text" value={plan[f.key]} onChange={e => setPlan(p => ({ ...p, [f.key]: e.target.value }))} placeholder={f.placeholder} style={inputStyle} />}
+                    </div>
+                  ))}
+                </div>
+                <button onClick={runSimulation} disabled={simulating} style={{ marginTop: 22, background: simulating ? S.g400 : S.blue, color: "#fff", border: "none", padding: "13px 26px", borderRadius: 10, fontFamily: "system-ui, sans-serif", fontSize: 15, fontWeight: 600, cursor: simulating ? "default" : "pointer", display: "flex", alignItems: "center", gap: 8 }}>
+                  {simulating ? <><span>Simulating </span><span className="dot1" style={{ display: "inline-block" }}>●</span><span className="dot2" style={{ display: "inline-block" }}>●</span><span className="dot3" style={{ display: "inline-block" }}>●</span></> : "⚡ Simulate Audience Reaction"}
+                </button>
+              </div>
+              <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                <div style={{ padding: "16px 20px", borderBottom: `1px solid ${S.g100}` }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 12 }}>Persona Reactions</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    {PERSONAS_STATIC.map((p, i) => (
+                      <button key={p.id} onClick={() => setActivePersona(i)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, border: "none", cursor: "pointer", textAlign: "left", background: activePersona === i ? S.bluePale : "transparent", borderLeft: activePersona === i ? `3px solid ${S.blue}` : "3px solid transparent", transition: "all .15s" }}>
+                        <div style={{ width: 28, height: 28, borderRadius: 7, background: p.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{p.icon}</div>
+                        <span style={{ fontSize: 13, fontWeight: activePersona === i ? 600 : 400, color: activePersona === i ? S.blue : S.g700 }}>{p.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{ padding: 20 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 18 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: persona.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{persona.icon}</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: S.g900 }}>{persona.label}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div><div style={{ fontSize: 10, fontWeight: 600, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 5 }}>Emotional Reaction</div><span style={{ fontSize: 12, fontWeight: 600, padding: "4px 12px", borderRadius: 20, background: persona.emotionBg, color: persona.emotionColor }}>{persona.emotion}</span></div>
+                    <div><div style={{ fontSize: 10, fontWeight: 600, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 5 }}>Top Objection</div><div style={{ fontSize: 13, color: S.g700, lineHeight: 1.5, fontStyle: "italic" }}>{persona.objection}</div></div>
+                    <div><div style={{ fontSize: 10, fontWeight: 600, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 5 }}>Sample Comment</div><div style={{ background: S.g50, borderRadius: 8, padding: "10px 12px", fontSize: 13, color: S.g700, lineHeight: 1.5 }}>{persona.comment}</div></div>
+                    <div>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>Backlash Risk</div>
+                      <div style={{ height: 6, background: S.g100, borderRadius: 4, overflow: "hidden", marginBottom: 5 }}><div style={{ height: "100%", borderRadius: 4, background: persona.riskColor, width: `${persona.riskBar}%`, transition: "width .6s ease" }} /></div>
+                      <span style={{ fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 20, background: persona.riskBg, color: persona.riskColor, letterSpacing: ".06em" }}>{persona.risk}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {showResults && (
+              <div className="fadeIn">
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 16, marginBottom: 20 }}>
+                  {SEGMENTS.map((seg, i) => (
+                    <div key={seg.id} style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22, opacity: showSegments.includes(i) ? 1 : 0, transform: showSegments.includes(i) ? "translateY(0)" : "translateY(16px)", transition: "all .4s" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }}><div style={{ width: 36, height: 36, borderRadius: 10, background: seg.iconBg, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>{seg.icon}</div><div style={{ fontSize: 14, fontWeight: 600 }}>{seg.name}</div></div>
+                      <div style={{ fontSize: 11, fontWeight: 500, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 }}>Sentiment</div>
+                      <div style={{ height: 6, background: S.g100, borderRadius: 4, overflow: "hidden", marginBottom: 4 }}><div style={{ height: "100%", borderRadius: 4, background: fillColor(seg.level), width: `${seg.pct}%`, transition: "width 1s ease" }} /></div>
+                      <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 800, marginBottom: 14 }}>{seg.pct}% positive</div>
+                      <div style={{ background: S.g50, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.g700, marginBottom: 10, lineHeight: 1.5 }}>⚡ <strong>Top Reaction:</strong> {seg.reaction}</div>
+                      <div style={{ background: S.bluePale, borderRadius: 8, padding: "10px 12px", fontSize: 12, color: S.blue, fontWeight: 500, lineHeight: 1.5 }}>→ {seg.fix}</div>
+                    </div>
+                  ))}
+                </div>
+                {showAnalysis && (
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }} className="fadeIn">
+                    <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 16 }}>Emotional Tone Analysis</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 16 }}>
+                        {[{ label: "Hype-driven", color: "#92400E", bg: "#FFFBEB" }, { label: "Superficial", color: "#991B1B", bg: "#FEF2F2" }, { label: "Commercial", color: S.g700, bg: S.g100 }, { label: "Unverified", color: "#991B1B", bg: "#FEF2F2" }].map(t => (
+                          <span key={t.label} style={{ padding: "6px 14px", borderRadius: 20, fontSize: 12, fontWeight: 500, background: t.bg, color: t.color }}>{t.label}</span>
+                        ))}
+                      </div>
+                      <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.6 }}>The campaign leans heavily on hype without substance. Eco-conscious and informed shoppers are likely to disengage or push back.</p>
+                    </div>
+                    <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 22 }}>
+                      <div style={{ fontSize: 12, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 16 }}>Backlash Risk Meter</div>
+                      <div style={{ height: 10, background: S.g100, borderRadius: 6, overflow: "hidden", marginBottom: 10 }}><div style={{ height: "100%", background: `linear-gradient(90deg,${S.green},${S.amber},${S.red})`, width: "100%", borderRadius: 6 }} /></div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, color: S.g400, fontWeight: 500 }}><span>Low</span><span>Medium</span><span>High</span></div>
+                      <div style={{ fontFamily: "Georgia, serif", fontSize: 20, fontWeight: 800, color: S.red, marginTop: 14 }}>⬤ HIGH RISK</div>
+                      <p style={{ fontSize: 13, color: S.g500, marginTop: 10, lineHeight: 1.6 }}>Apply the suggested fixes to drop risk from HIGH → MEDIUM or lower.</p>
+                    </div>
+                  </div>
+                )}
+                {showNextBtn && (
+                  <button onClick={() => goTo(4)} className="fadeIn" style={{ background: S.blue, color: "#fff", border: "none", padding: "15px 30px", borderRadius: 12, fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>See the Improved Campaign ✦</button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Screen 5: AI Focus Group (Hardcoded Mock) ─────────── */
+    const MOCK_PERSONAS = [
+      { name: "Zoe Chen", age: 22, job: "Fashion TikToker", summary: "I buy based on vibes, but I cancel based on values — and I have 40k followers watching both.", traits: ["Trend-driven", "Vocal", "Brand-skeptical"], motivations: "Wants to look good on a budget without feeling guilty about it. Follows sustainability creators alongside fast fashion hauls.", sentimentScore: 44 },
+      { name: "Marcus Webb", age: 29, job: "Sustainability Consultant", summary: "I don't expect brands like this to be perfect, but I do expect them to stop pretending.", traits: ["Analytical", "Cynical", "Principled"], motivations: "Holds brands accountable publicly. Has written threads about greenwashing that went viral. Won't buy from SHEIN but his opinion shapes others'.", sentimentScore: 18 },
+      { name: "Priya Nair", age: 26, job: "Grad Student", summary: "Look, I know fast fashion is bad, but rent is $1,800 a month and Halloween is one night.", traits: ["Practical", "Price-sensitive", "Pragmatic"], motivations: "Balances ethical ideals with a tight budget. Will rationalize a purchase she likes. The swing voter of this focus group.", sentimentScore: 67 },
+      { name: "Devon Park", age: 31, job: "Creative Director", summary: "The creative is fine. The problem is the brand has zero credibility to pull off a fun-and-carefree tone right now.", traits: ["Aesthetic-driven", "Strategic", "Skeptical"], motivations: "Evaluates campaigns professionally. Cares about craft and consistency. Can separate personal ethics from marketing critique.", sentimentScore: 38 },
+    ];
+
+    const MOCK_TRANSCRIPT = [
+      { type: "moderator", speaker: "Moderator", text: "Thanks everyone for joining. We're looking at SHEIN's 2024 Halloween campaign — 'Spook-Tacular Deals Are Ready to Take Over Your Halloween.' Take a moment to react. First impressions only." },
+      { type: "persona", speaker: "Zoe Chen", text: "Okay so the aesthetic is actually giving a little? Like the dark purple banner, the pumpkin — it's cute. But the second I see SHEIN my brain just goes... oh. This again." },
+      { type: "persona", speaker: "Priya Nair", text: "I mean I actually clicked through? I'm not gonna lie. I need a Halloween outfit and I'm not spending $80 on something I'll wear once. The deals are real." },
+      { type: "persona", speaker: "Marcus Webb", text: "The deals are real, yeah. So is the landfill. We're talking about a company that produces thousands of new items daily encouraging people to buy disposable costumes. There is no version of this campaign that isn't a problem for me." },
+      { type: "persona", speaker: "Devon Park", text: "From a pure craft standpoint — 'Spook-Tacular' is doing a lot of heavy lifting. It's the whole idea. There's nothing underneath it. No story, no hook, no reason to care beyond 'it's cheap and it's Halloween.'" },
+      { type: "moderator", speaker: "Moderator", text: "Zoe, you mentioned the aesthetic worked for you initially — what changed when you saw the brand?" },
+      { type: "persona", speaker: "Zoe Chen", text: "It's the trust thing. Like I've seen the warehouse videos. I've seen the quality complaints. So even if the banner looks good, I'm already mentally writing the comment about how it falls apart after one wear. Which — I would post that. That's content." },
+      { type: "persona", speaker: "Priya Nair", text: "I think you're all being a bit much though? It's Halloween. It's supposed to be cheap and fun. Not every purchase needs to be a political statement." },
+      { type: "persona", speaker: "Marcus Webb", text: "Priya I hear you, genuinely. But the campaign isn't just targeting you — it's reaching people who don't have the context, and it's normalizing this as just... fun seasonal shopping. That's what I find irresponsible." },
+      { type: "persona", speaker: "Devon Park", text: "What would actually work here is if they leaned into the price point as the feature, not the vibe. Like — 'Real costume, real price, no regrets.' That's honest. That's something. Right now it's trying to be aspirational and that's just not believable from this brand." },
+      { type: "persona", speaker: "Zoe Chen", text: "Okay Devon that's actually good. If they just owned what they are instead of trying to compete with brands that have actual aesthetic credibility — I might respect it more. Maybe not buy it but like... respect it." },
+      { type: "moderator", speaker: "Moderator", text: "Would any of you share this campaign? Click through? Buy something?" },
+      { type: "persona", speaker: "Priya Nair", text: "I'd buy something. Already said that. Not proud of it but yes." },
+      { type: "persona", speaker: "Zoe Chen", text: "I wouldn't share it positively. But I'd probably stitch it. Which is technically more reach for them so — you're welcome SHEIN I guess?" },
+      { type: "persona", speaker: "Marcus Webb", text: "I'd quote-tweet it with a thread about fast fashion Halloween waste. So they'd be getting reach from me too, just not the kind they want." },
+      { type: "persona", speaker: "Devon Park", text: "I wouldn't engage at all. It's not interesting enough to critique professionally and it's not good enough to endorse. It just exists." },
+      { type: "moderator", speaker: "Moderator", text: "Last question — what would make this campaign better?" },
+      { type: "persona", speaker: "Priya Nair", text: "Just show me the actual deals clearly. Price comparisons. What I'm getting. Stop with the hype language and just be useful." },
+      { type: "persona", speaker: "Devon Park", text: "Commit to a lane. Either 'we're fun and cheap, deal with it' or say something real about quality. The middle ground reads as empty." },
+      { type: "persona", speaker: "Zoe Chen", text: "Honestly? Feature real customers. Not influencers, not models — actual people in their SHEIN Halloween fits showing it held up. That would be different. That would get me to stop scrolling." },
+      { type: "persona", speaker: "Marcus Webb", text: "For me it would need to be structural, not cosmetic. Like — disclose the sourcing, show the labor conditions, donate a percentage of Halloween sales to a textile recycling program. That's the only version of this I'd respect. I know that's not what anyone wants to hear but you asked." },
+    ];
+
+    const MOCK_DISSENT = [
+      { type: "persona", speaker: "Marcus Webb", text: "Actually I want to go back to something. Priya said 'not every purchase needs to be a political statement' — but that framing only works if you have the luxury of opting out of the politics. The garment workers making these don't get that option." },
+      { type: "persona", speaker: "Zoe Chen", text: "Okay Marcus is going off and honestly I don't disagree. The more I think about it the more the cheerful pumpkin energy feels tone-deaf. Like we're all just supposed to pretend the supply chain discourse didn't happen?" },
+      { type: "persona", speaker: "Marcus Webb", text: "And the hashtag — #SHEINHalloweenDeals — is going to get hijacked. I'm telling you right now. Within 48 hours of launch that hashtag is going to have more negative content than positive. That's just how this goes for this brand." },
+      { type: "persona", speaker: "Devon Park", text: "He's not wrong. I've seen it happen three campaigns in a row with them. The community ratio on anything they put out is brutal. They haven't earned good faith." },
+    ];
+
+    function Screen5({ S }) {
+      const [phase, setPhase] = useState("form");
+      const [loadMsg, setLoadMsg] = useState("");
+      const [activeTab, setActiveTab] = useState("transcript");
+      const [visibleLines, setVisibleLines] = useState(0);
+      const [transcript, setTranscript] = useState(MOCK_TRANSCRIPT);
+      const [showDissent, setShowDissent] = useState(false);
+      const [dissentVisible, setDissentVisible] = useState(0);
+
+      const LOAD_MSGS = ["Assembling your focus group panel…","Building personas from demographics…","Generating personality profiles…","Running the focus group discussion…","Capturing reactions and objections…","Extracting key insights…","Calculating sentiment scores…","Finalising your report…"];
+
+      const runFocusGroup = () => {
+        setPhase("loading");
+        setVisibleLines(0);
+        let idx = 0;
+        setLoadMsg(LOAD_MSGS[0]);
+        const ticker = setInterval(() => { idx = (idx + 1) % LOAD_MSGS.length; setLoadMsg(LOAD_MSGS[idx]); }, 1100);
+        setTimeout(() => {
+          clearInterval(ticker);
+          setPhase("results");
+          setActiveTab("transcript");
+          MOCK_TRANSCRIPT.forEach((_, i) => setTimeout(() => setVisibleLines(v => v + 1), i * 480));
+        }, 3200);
+      };
+
+      const addDissent = () => {
+        if (showDissent) return;
+        setShowDissent(true);
+        MOCK_DISSENT.forEach((_, i) => setTimeout(() => setDissentVisible(v => v + 1), i * 520));
+      };
+
+      const MOCK_INSIGHTS = {
+        whatWorks: [
+          "Price-sensitive segment (Priya archetype) is genuinely motivated — the value proposition lands for budget-conscious shoppers who need a one-night costume.",
+          "The Halloween aesthetic (dark tones, seasonal imagery) reads as visually appropriate — the creative direction isn't the problem.",
+          "The campaign will generate organic reach through negative engagement — vocal critics like Zoe and Marcus will stitch and quote-tweet it, amplifying visibility."
+        ],
+        whatDoesnt: [
+          "Zero credibility for aspirational or lifestyle framing — the panel immediately discounts any attempt at a 'vibe' or 'movement' tone.",
+          "The slogan 'Spook-Tacular' is purely decorative with no strategic idea underneath it. It communicates nothing about why to choose SHEIN.",
+          "The hashtag #SHEINHalloweenDeals is predicted to get ratio'd — brand's negative association means community hijacking is near-certain."
+        ],
+        opportunities: [
+          "Own the price point as a feature, not an apology — reframe around 'real costume, real price' rather than competing on aesthetic credibility.",
+          "UGC from real customers would break through skepticism more effectively than polished brand assets — authenticity over production value.",
+          "A transparency add-on (recycling info, care tips to extend garment life) would neutralize the most vocal critics at low cost."
+        ],
+        suggestedTweaks: [
+          "Lead with specific deal callouts rather than hype language — 'Full costume under $25' outperforms 'Spook-Tacular Deals' for this audience.",
+          "Drop the aspirational tone entirely. Lean into self-aware, value-forward messaging — it's more honest and more defensible.",
+          "Feature real customer photos in Halloween fits rather than brand imagery — reduces the polish gap that signals inauthenticity.",
+          "Add a single sustainability signal (e.g., textile recycling drop-off info) to give eco-critical voices something to work with."
+        ],
+        predictedPerformance: "This campaign will generate significant impressions but a poor sentiment ratio. Price-driven shoppers will convert, but the brand's pre-existing trust deficit means the loudest voices in comment sections will be critics. Estimated positive sentiment at 38–42% — enough to drive some sales but insufficient to shift brand perception. The campaign as written is a missed opportunity: it neither capitalizes on what SHEIN does well (extreme value) nor addresses the objections that reliably suppress engagement."
+      };
+
+      const avgSentiment = Math.round(MOCK_PERSONAS.reduce((a, p) => a + p.sentimentScore, 0) / MOCK_PERSONAS.length);
+      const sentColor = avgSentiment >= 60 ? S.green : avgSentiment >= 35 ? S.amber : S.red;
+      const sentLabel = avgSentiment >= 60 ? "Positive" : avgSentiment >= 35 ? "Mixed" : "Critical";
+
+      const inputSty = { width: "100%", border: `1.5px solid ${S.g200}`, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: S.g900, background: "#fff", outline: "none", fontFamily: "system-ui, sans-serif" };
+      const labelSty = { display: "block", fontSize: 11, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 6 };
+      const cardSty  = { background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: 24, boxShadow: "0 2px 8px rgba(0,0,0,.04)" };
+
+      /* ── FORM ── */
+      if (phase === "form") return (
+        <div style={{ background: S.g50, minHeight: "calc(100vh - 56px)", padding: "40px 28px" }} className="fadeIn">
+          <div style={{ maxWidth: 1020, margin: "0 auto" }}>
+            <div style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: S.blue, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ width: 6, height: 6, background: S.blue, borderRadius: "50%", display: "inline-block", animation: "blink 1.4s ease-in-out infinite" }} />AI Focus Group Simulator
+              </div>
+              <h2 style={{ fontFamily: "Georgia, serif", fontSize: 34, fontWeight: 800, marginBottom: 8 }}>Build Your Focus Group</h2>
+              <p style={{ fontSize: 15, color: S.g500, marginBottom: 18 }}>Define your audience and campaign, then let AI simulate a live focus group discussion with generated personas.</p>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12, fontWeight: 600, color: S.g500 }}>Quick presets:</span>
+                {["⚡ Gen Z","💼 Millennial","💎 High-income"].map(p => (
+                  <button key={p} style={{ padding: "5px 14px", borderRadius: 20, border: `1.5px solid ${S.g200}`, background: "#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", color: S.g700 }}>{p}</button>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20, marginBottom: 20 }}>
+              <div style={cardSty}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: S.g700, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 18 }}>Demographics</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <label style={{ ...labelSty, marginBottom: 0 }}>Age Range</label>
+                      <span style={{ fontSize: 13, fontWeight: 700, fontFamily: "monospace", color: S.g900 }}>18 – 34</span>
+                    </div>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <input type="range" min={16} max={70} defaultValue={18} style={{ flex: 1 }} />
+                      <input type="range" min={16} max={70} defaultValue={34} style={{ flex: 1 }} />
+                    </div>
+                  </div>
+                  <div><label style={labelSty}>Gender</label><select style={inputSty} defaultValue="Mixed"><option>Mixed</option></select></div>
+                  <div><label style={labelSty}>Location</label><input style={inputSty} defaultValue="United States" /></div>
+                  <div><label style={labelSty}>Income Level</label><select style={inputSty} defaultValue="$30k–$80k"><option>$30k–$80k</option></select></div>
+                  <div><label style={labelSty}>Education</label><select style={inputSty} defaultValue="Mixed"><option>Mixed</option></select></div>
+                  <div><label style={labelSty}>Occupation (optional)</label><input style={inputSty} defaultValue="Students, creatives, young professionals" /></div>
+                </div>
+              </div>
+
+              <div style={cardSty}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: S.g700, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 18 }}>Psychographics</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div>
+                    <label style={labelSty}>Interests</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {["Fashion","Social Media","Sustainability","Budget shopping","Pop culture"].map(t => (
+                        <span key={t} style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1.5px solid ${S.g900}`, background: S.g900, color: "#fff" }}>{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelSty}>Values</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {["Authenticity","Convenience","Sustainability"].map(t => (
+                        <span key={t} style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1.5px solid ${S.g900}`, background: S.g900, color: "#fff" }}>{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelSty}>Personality Traits</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {["Skeptical","Trend-driven","Practical","Vocal"].map(t => (
+                        <span key={t} style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1.5px solid ${S.g900}`, background: S.g900, color: "#fff" }}>{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label style={labelSty}>Media Habits</label>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {["TikTok","Instagram","YouTube","Twitter/X"].map(t => (
+                        <span key={t} style={{ padding: "4px 12px", borderRadius: 20, fontSize: 12, fontWeight: 500, border: `1.5px solid ${S.g900}`, background: S.g900, color: "#fff" }}>{t}</span>
+                      ))}
+                    </div>
+                  </div>
+                  <div><label style={labelSty}>Brand Affinities</label><input style={inputSty} defaultValue="ZARA, H&M, Depop, Vinted" /></div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 20, marginBottom: 20 }}>
+              <div style={cardSty}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: S.g700, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 18 }}>Campaign</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                  <div><label style={labelSty}>Campaign Description</label>
+                    <textarea rows={5} style={{ ...inputSty, resize: "none", lineHeight: 1.6 }} defaultValue={`2024 SHEIN Halloween Deals — "Spook-Tacular Deals Are Ready to Take Over Your Halloween." Social media campaign targeting Gen Z and young millennials, running Sep 16–Oct 31. Tone is playful and hype-driven. Hashtag: #SHEINHalloweenDeals. Slogan: Slay the Season.`} />
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                    <div><label style={labelSty}>Format</label><select style={inputSty}><option>Social Media Campaign</option></select></div>
+                    <div><label style={labelSty}>Tone</label><select style={inputSty}><option>Playful</option></select></div>
+                  </div>
+                </div>
+              </div>
+
+              <div style={cardSty}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: S.g700, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 18 }}>Focus Group Settings</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+                      <label style={{ ...labelSty, marginBottom: 0 }}>Number of Personas</label>
+                      <span style={{ fontFamily: "monospace", fontSize: 16, fontWeight: 700 }}>4</span>
+                    </div>
+                    <input type="range" min={3} max={8} defaultValue={4} />
+                    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 11, color: S.g400 }}><span>3 (focused)</span><span>8 (full panel)</span></div>
+                  </div>
+                  <div>
+                    <label style={labelSty}>Audience Diversity</label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                      {["low","medium","high"].map(d => (
+                        <button key={d} style={{ padding: "8px 0", border: `1.5px solid ${d === "high" ? S.g900 : S.g200}`, borderRadius: 8, background: d === "high" ? S.g900 : "#fff", color: d === "high" ? "#fff" : S.g500, fontSize: 12, fontWeight: 600, cursor: "pointer", textTransform: "capitalize" }}>{d}</button>
+                      ))}
+                    </div>
+                    <p style={{ fontSize: 11, color: S.g400, marginTop: 7, lineHeight: 1.5 }}>Wildly varied — full range of opinions</p>
+                  </div>
+                  <div>
+                    <label style={labelSty}>Feedback Depth</label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                      {[["quick","Quick Reactions"],["in-depth","In-Depth Discussion"]].map(([v,l]) => (
+                        <button key={v} style={{ padding: "8px 0", border: `1.5px solid ${v === "in-depth" ? S.g900 : S.g200}`, borderRadius: 8, background: v === "in-depth" ? S.g900 : "#fff", color: v === "in-depth" ? "#fff" : S.g500, fontSize: 12, fontWeight: 600, cursor: "pointer" }}>{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
+              <button onClick={runFocusGroup} style={{ background: S.blue, color: "#fff", border: "none", padding: "15px 36px", borderRadius: 12, fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 8 }}>
+                Run AI Focus Group →
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+
+      /* ── LOADING ── */
+      if (phase === "loading") return (
+        <div className="fadeIn" style={{ background: S.g50, minHeight: "calc(100vh - 56px)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 20, textAlign: "center", padding: 40 }}>
+          <div style={{ width: 52, height: 52, border: `3px solid ${S.g200}`, borderTopColor: S.blue, borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+          <div>
+            <div style={{ fontFamily: "Georgia, serif", fontSize: 24, marginBottom: 8 }}>{loadMsg}</div>
+            <div style={{ fontSize: 13, color: S.g500 }}>Generating 4 personas and simulating the discussion…</div>
+          </div>
+          <div style={{ display: "flex", gap: 5 }}>
+            {[0,1,2,3,4].map(i => <div key={i} style={{ width: 6, height: 6, borderRadius: "50%", background: S.g300, animation: `loadDot 1.4s ease-in-out ${i * 180}ms infinite` }} />)}
+          </div>
+        </div>
+      );
+
+      /* ── RESULTS ── */
+      const allLines = showDissent ? [...MOCK_TRANSCRIPT, ...MOCK_DISSENT.slice(0, dissentVisible)] : MOCK_TRANSCRIPT.slice(0, visibleLines);
+
+      return (
+        <div style={{ background: S.g50, minHeight: "calc(100vh - 56px)", padding: "40px 28px" }} className="fadeIn">
+          <div style={{ maxWidth: 1020, margin: "0 auto" }}>
+
+            {/* summary bar */}
+            <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: "18px 24px", marginBottom: 24, display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap", boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 10, color: S.g500, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 4 }}>Campaign Tested</div>
+                <div style={{ fontFamily: "Georgia, serif", fontSize: 16, lineHeight: 1.4 }}>2024 SHEIN Halloween Deals — "Spook-Tacular Deals Are Ready to Take Over Your Halloween…"</div>
+              </div>
+              <div style={{ display: "flex", gap: 20, flexShrink: 0 }}>
+                {[
+                  { val: `${avgSentiment}%`, sub: "Avg Sentiment", color: sentColor },
+                  { val: MOCK_PERSONAS.length, sub: "Personas", color: S.g900 },
+                  { val: MOCK_TRANSCRIPT.length, sub: "Exchanges", color: S.g900 },
+                ].map((m, i) => (
+                  <div key={i} style={{ textAlign: "center" }}>
+                    <div style={{ fontFamily: "Georgia, serif", fontSize: 28, fontWeight: 800, color: m.color, lineHeight: 1 }}>{m.val}</div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: S.g400, textTransform: "uppercase", letterSpacing: ".06em", marginTop: 3 }}>{m.sub}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button onClick={addDissent} disabled={showDissent} style={{ background: showDissent ? S.g200 : S.red, color: showDissent ? S.g400 : "#fff", border: "none", padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: showDissent ? "default" : "pointer", transition: "all .15s" }}>
+                  {showDissent ? "Dissent added" : "⚡ Add Dissent"}
+                </button>
+                <button onClick={() => { setPhase("form"); setVisibleLines(0); setShowDissent(false); setDissentVisible(0); }} style={{ background: "transparent", border: `1.5px solid ${S.g200}`, color: S.g700, padding: "10px 18px", borderRadius: 10, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>← New Group</button>
+              </div>
+            </div>
+
+            {/* tabs */}
+            <div style={{ display: "flex", gap: 4, marginBottom: 20, background: S.g100, borderRadius: 10, padding: 4, width: "fit-content" }}>
+              {[["transcript","💬 Transcript"],["personas","👥 Personas"],["insights","📊 Insights"]].map(([v, l]) => (
+                <button key={v} onClick={() => setActiveTab(v)} style={{ padding: "8px 18px", borderRadius: 7, border: "none", fontSize: 13, fontWeight: 600, cursor: "pointer", background: activeTab === v ? "#fff" : "transparent", color: activeTab === v ? S.g900 : S.g400, boxShadow: activeTab === v ? "0 1px 4px rgba(0,0,0,.1)" : "none", transition: "all .15s" }}>{l}</button>
+              ))}
+            </div>
+
+            {/* ── Transcript ── */}
+            {activeTab === "transcript" && (
+              <div style={{ display: "flex", gap: 20, alignItems: "flex-start" }}>
+                <div style={{ flex: 1, background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: 28, boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 22 }}>Focus Group Discussion</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    {allLines.map((line, i) => {
+                      if (line.type === "moderator") return (
+                        <div key={i} style={{ display: "flex", justifyContent: "center", animation: "fadeIn .35s ease forwards" }}>
+                          <div style={{ background: S.g50, border: `1px dashed ${S.g200}`, borderRadius: 10, padding: "9px 16px", fontSize: 12, color: S.g500, fontStyle: "italic", maxWidth: "65%", textAlign: "center" }}>📋 {line.text}</div>
+                        </div>
+                      );
+                      const pIdx = MOCK_PERSONAS.findIndex(p => p.name === line.speaker);
+                      const isEven = pIdx % 2 === 0;
+                      return (
+                        <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isEven ? "flex-start" : "flex-end", gap: 4, animation: "fadeIn .35s ease forwards" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ width: 22, height: 22, borderRadius: 6, background: AVATAR_BG[pIdx % AVATAR_BG.length], display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{AVATAR_EM[pIdx % AVATAR_EM.length]}</div>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: S.g400, textTransform: "uppercase", letterSpacing: ".06em" }}>{line.speaker}</span>
+                          </div>
+                          <div style={{ padding: "12px 16px", borderRadius: isEven ? "4px 14px 14px 14px" : "14px 4px 14px 14px", fontSize: 14, lineHeight: 1.65, maxWidth: "80%", background: isEven ? "#fff" : S.g900, color: isEven ? S.g900 : "#fff", border: isEven ? `1px solid ${S.g200}` : "none" }}>{line.text}</div>
+                        </div>
+                      );
+                    })}
+                    {visibleLines < MOCK_TRANSCRIPT.length && phase === "results" && !showDissent && (
+                      <div style={{ textAlign: "center", padding: "8px 0" }}>
+                        <span style={{ fontSize: 13, color: S.g400, fontStyle: "italic" }}>Discussion ongoing</span>
+                        <span style={{ display: "inline-block", width: 2, height: "1em", background: S.g400, marginLeft: 3, verticalAlign: "middle", animation: "blink .7s infinite" }} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+                <div style={{ width: 190, flexShrink: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: S.g500, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 10 }}>Panel</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {MOCK_PERSONAS.map((p, i) => {
+                      const sc = p.sentimentScore;
+                      const col = sc >= 60 ? S.green : sc >= 35 ? S.amber : S.red;
+                      return (
+                        <div key={i} style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 10, padding: "10px 12px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                            <div style={{ width: 28, height: 28, borderRadius: 7, background: AVATAR_BG[i % AVATAR_BG.length], display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>{AVATAR_EM[i % AVATAR_EM.length]}</div>
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 700 }}>{p.name.split(" ")[0]}</div>
+                              <div style={{ fontSize: 11, color: S.g400 }}>{p.age}, {p.job.split(" ").slice(0, 2).join(" ")}</div>
+                            </div>
+                          </div>
+                          <div style={{ height: 4, background: S.g100, borderRadius: 2, overflow: "hidden" }}>
+                            <div style={{ height: "100%", background: col, width: `${sc}%`, borderRadius: 2 }} />
+                          </div>
+                          <div style={{ fontSize: 10, color: col, fontWeight: 600, marginTop: 3 }}>{sc}% sentiment</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Personas ── */}
+            {activeTab === "personas" && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+                {MOCK_PERSONAS.map((p, i) => {
+                  const sc = p.sentimentScore;
+                  const col = sc >= 60 ? S.green : sc >= 35 ? S.amber : S.red;
+                  const bg  = sc >= 60 ? S.greenPale : sc >= 35 ? "#FFFBEB" : S.redPale;
+                  const lbl = sc >= 60 ? "Positive" : sc >= 35 ? "Mixed" : "Skeptical";
+                  return (
+                    <div key={i} style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: 22, boxShadow: "0 2px 8px rgba(0,0,0,.04)", position: "relative", overflow: "hidden", animation: `fadeIn .4s ease ${i*80}ms forwards`, opacity: 0 }}>
+                      <div style={{ position: "absolute", top: 0, right: 0, width: 55, height: 55, borderRadius: "0 16px 0 55px", background: AVATAR_BG[i % AVATAR_BG.length], opacity: .6 }} />
+                      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+                        <div style={{ width: 44, height: 44, borderRadius: 12, background: AVATAR_BG[i % AVATAR_BG.length], display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{AVATAR_EM[i % AVATAR_EM.length]}</div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, marginBottom: 2 }}>{p.name}</div>
+                          <div style={{ fontSize: 12, color: S.g500 }}>{p.age} · {p.job}</div>
+                        </div>
+                        <span style={{ padding: "3px 10px", borderRadius: 20, fontSize: 11, fontWeight: 600, background: bg, color: col, border: `1px solid ${col}33`, flexShrink: 0 }}>{lbl}</span>
+                      </div>
+                      <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.6, marginBottom: 12, fontStyle: "italic" }}>"{p.summary}"</p>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
+                        {p.traits.map(t => <span key={t} style={{ padding: "3px 9px", borderRadius: 12, fontSize: 11, fontWeight: 600, background: S.g100, color: S.g700, border: `1px solid ${S.g200}` }}>{t}</span>)}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10, fontWeight: 600, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>Key Motivations</div>
+                        <p style={{ fontSize: 12, color: S.g500, lineHeight: 1.6 }}>{p.motivations}</p>
+                      </div>
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: S.g400, textTransform: "uppercase", letterSpacing: ".07em" }}>Sentiment</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, fontFamily: "monospace", color: col }}>{sc}%</span>
+                        </div>
+                        <div style={{ height: 6, background: S.g100, borderRadius: 3, overflow: "hidden" }}>
+                          <div style={{ height: "100%", background: col, width: `${sc}%`, borderRadius: 3, transition: "width .8s ease" }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* ── Insights ── */}
+            {activeTab === "insights" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }} className="fadeIn">
+                {[
+                  { title: "✅ What Works", items: MOCK_INSIGHTS.whatWorks, color: S.green, bg: S.greenPale, border: "#A7F3D0" },
+                  { title: "⚠ What Doesn't", items: MOCK_INSIGHTS.whatDoesnt, color: S.red, bg: S.redPale, border: "#FECACA" },
+                  { title: "💡 Opportunities", items: MOCK_INSIGHTS.opportunities, color: S.blue, bg: S.bluePale, border: "#BFDBFE" },
+                  { title: "🛠 Suggested Tweaks", items: MOCK_INSIGHTS.suggestedTweaks, color: S.amber, bg: "#FFFBEB", border: "#FDE68A" },
+                ].map(sec => (
+                  <div key={sec.title} style={{ background: sec.bg, border: `1.5px solid ${sec.border}`, borderRadius: 14, padding: 22 }}>
+                    <div style={{ fontWeight: 800, fontSize: 14, color: sec.color, marginBottom: 14 }}>{sec.title}</div>
+                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                      {sec.items.map((item, i) => (
+                        <div key={i} style={{ display: "flex", gap: 10, fontSize: 13, lineHeight: 1.6, color: S.g900 }}>
+                          <span style={{ color: sec.color, fontWeight: 700, flexShrink: 0 }}>→</span>
+                          <span>{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <div style={{ gridColumn: "span 2", background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 14, padding: 24, boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                  <div style={{ fontWeight: 800, fontSize: 14, marginBottom: 12 }}>🎯 Predicted Performance</div>
+                  <p style={{ fontSize: 14, lineHeight: 1.75, color: S.g500, fontStyle: "italic", marginBottom: 18 }}>{MOCK_INSIGHTS.predictedPerformance}</p>
+                  <div style={{ display: "flex", alignItems: "center", gap: 20, paddingTop: 16, borderTop: `1px solid ${S.g100}` }}>
+                    <div>
+                      <div style={{ fontSize: 10, color: S.g400, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".07em", marginBottom: 4 }}>Overall Sentiment</div>
+                      <div style={{ fontFamily: "Georgia, serif", fontSize: 26, fontWeight: 800, color: sentColor }}>{avgSentiment}% {sentLabel}</div>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ height: 8, background: S.g100, borderRadius: 4, overflow: "hidden" }}>
+                        <div style={{ height: "100%", background: `linear-gradient(90deg, ${S.red}, ${S.amber}, ${S.green})`, width: `${avgSentiment}%`, borderRadius: 4, transition: "width 1s ease" }} />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 11, color: S.g400 }}><span>Critical</span><span>Neutral</span><span>Positive</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    /* ─── Main App ──────────────────────────────────────────── */
+    function App() {
+      const [screen, setScreen] = useState(1);
+      const [chaos, setChaos] = useState(false);
+      const [visibleComments, setVisibleComments] = useState([]);
+      const [simulating, setSimulating] = useState(false);
+      const [showResults, setShowResults] = useState(false);
+      const [showSegments, setShowSegments] = useState([]);
+      const [showAnalysis, setShowAnalysis] = useState(false);
+      const [showNextBtn, setShowNextBtn] = useState(false);
+      const [countdown] = useCountdown(23 * 3600 + 59 * 60);
+
+      const goTo = n => { setScreen(n); setChaos(false); window.scrollTo(0, 0); };
+
+      const launchCampaign = () => {
+        setChaos(true); setVisibleComments([]);
+        COMMENTS.forEach((c, i) => setTimeout(() => setVisibleComments(prev => [...prev, c.id]), 400 + i * 650));
+      };
+
+      const runSimulation = () => {
+        setSimulating(true); setShowResults(false); setShowSegments([]); setShowAnalysis(false); setShowNextBtn(false);
+        setTimeout(() => {
+          setSimulating(false); setShowResults(true);
+          SEGMENTS.forEach((_, i) => setTimeout(() => setShowSegments(prev => [...prev, i]), 100 + i * 160));
+          setTimeout(() => setShowAnalysis(true), 600);
+          setTimeout(() => setShowNextBtn(true), 1000);
+        }, 2300);
+      };
+
+      const navSteps = ["Launch", "Crisis", "Simulate", "Results", "Focus Group", "How It Works"];
+      const fillColor = level => level === "low" ? S.red : level === "mid" ? S.amber : S.green;
+
+      return (
+        <div style={{ fontFamily: "system-ui, sans-serif", background: S.g50, minHeight: "100vh", color: S.g900 }}>
+          <style>{`
+            * { box-sizing: border-box; margin: 0; padding: 0; }
+            @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+            @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+            @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+            @keyframes loadDot { 0%,80%,100%{opacity:.2;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            .dot1{animation:loadDot 1.2s ease-in-out infinite}
+            .dot2{animation:loadDot 1.2s ease-in-out .2s infinite}
+            .dot3{animation:loadDot 1.2s ease-in-out .4s infinite}
+            .fadeIn{animation:fadeIn .4s ease forwards}
+            .pulseBadge{animation:pulse 1.4s ease-in-out infinite}
+            textarea:focus, input:focus, select:focus { outline: none; border-color: #2563EB !important; }
+            select { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2394A3B8' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px !important; }
+          `}</style>
+
+          {/* NAV */}
+          <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 100, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", borderBottom: `1px solid ${S.g200}`, padding: "0 28px", height: 56, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div style={{ fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 800, display: "flex", alignItems: "center", gap: 8 }}>
+              CampaignIQ
+              <span style={{ background: S.blue, color: "#fff", padding: "2px 8px", borderRadius: 5, fontSize: 12, fontFamily: "system-ui, sans-serif" }}>DEMO</span>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              {navSteps.map((label, i) => (
+                <button key={i} onClick={() => goTo(i + 1)} style={{
+                  padding: "5px 14px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  background: screen === i + 1 ? S.blue : "transparent",
+                  color: screen === i + 1 ? "#fff" : S.g400,
+                  border: (i === 4 || i === 5) && screen !== i + 1 ? `1.5px solid ${S.g200}` : "none",
+                  transition: "all .2s",
+                }}>{label}</button>
+              ))}
+            </div>
+          </nav>
+
+          <div style={{ paddingTop: 56 }}>
+            {/* SCREEN 1 */}
+            {screen === 1 && (
+              <div style={{ background: "#fff", minHeight: "calc(100vh - 56px)" }}>
+                <div style={{ maxWidth: 1060, margin: "0 auto", padding: "48px 28px", display: "grid", gridTemplateColumns: "1fr 400px", gap: 36, alignItems: "start" }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: S.blue, marginBottom: 12 }}>
+                      <span style={{ width: 6, height: 6, background: S.blue, borderRadius: "50%", display: "inline-block", animation: "blink 1.4s ease-in-out infinite" }} />Campaign Preview
+                    </div>
+                    <h1 style={{ fontFamily: "Georgia, serif", fontSize: 40, fontWeight: 800, lineHeight: 1.2, marginBottom: 10 }}>Ready to go live?</h1>
+                    <p style={{ fontSize: 15, color: S.g500, lineHeight: 1.6, marginBottom: 32 }}>Your campaign has been approved. Review the final creative before launching to 2.4M subscribers.</p>
+                    <div style={{ border: `1.5px solid ${S.g200}`, borderRadius: 16, overflow: "hidden", boxShadow: "0 4px 24px rgba(0,0,0,.06)" }}>
+                      <div style={{ height: 240, background: "linear-gradient(135deg,#1a1a2e,#2d1b4e,#4a1942)", display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
+                        <div style={{ position: "absolute", inset: 0, backgroundImage: "repeating-linear-gradient(45deg,rgba(255,140,0,.04) 0px,rgba(255,140,0,.04) 1px,transparent 1px,transparent 24px)" }} />
+                        <div style={{ textAlign: "center", zIndex: 1 }}>
+                          <div style={{ width: 60, height: 60, background: "rgba(255,255,255,.12)", borderRadius: 14, display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px", fontSize: 30, backdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,.2)" }}>🎃</div>
+                          <div style={{ fontSize: 12, fontWeight: 500, color: "rgba(255,255,255,.5)" }}>Campaign Banner Placeholder</div>
+                        </div>
+                      </div>
+                      <div style={{ padding: 24 }}>
+                        <span style={{ display: "inline-block", fontSize: 10, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: "#F59E0B", background: "#FFFBEB", borderRadius: 4, padding: "3px 8px", marginBottom: 12 }}>Halloween Sale Campaign</span>
+                        <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700, lineHeight: 1.3, marginBottom: 8 }}>"Spook-Tacular Deals Are Ready to Take Over Your Halloween 🎃"</div>
+                        <div style={{ fontSize: 14, color: S.g500, marginBottom: 20, lineHeight: 1.6 }}>Shop at SHEIN with Amazing Offers. #SHEINHalloweenDeals — Sep 16 through Oct 31.</div>
+                        <div style={{ display: "flex", gap: 10 }}>
+                          <button style={{ background: S.g900, color: "#fff", border: "none", padding: "11px 26px", borderRadius: 8, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Shop Now</button>
+                          <button style={{ background: S.g100, border: "none", padding: "11px 14px", borderRadius: 8, fontSize: 14, cursor: "pointer", color: S.g500 }}>↗ Share</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ background: S.g900, borderRadius: 16, padding: 28, color: "#fff", textAlign: "center" }}>
+                      <div style={{ fontSize: 11, fontWeight: 500, letterSpacing: ".1em", textTransform: "uppercase", color: "rgba(255,255,255,.45)", marginBottom: 20 }}>Scheduled Launch</div>
+                      <div style={{ display: "flex", justifyContent: "center", alignItems: "flex-start", gap: 10, marginBottom: 24 }}>
+                        {[countdown[0], countdown[1], countdown[2]].map((val, i) => (
+                          <React.Fragment key={i}>
+                            {i > 0 && <div style={{ fontFamily: "Georgia, serif", fontSize: 36, fontWeight: 800, color: "rgba(255,255,255,.25)", marginTop: 6 }}>:</div>}
+                            <div style={{ textAlign: "center" }}>
+                              <div style={{ fontFamily: "Georgia, serif", fontSize: 40, fontWeight: 800, background: "rgba(255,255,255,.08)", borderRadius: 10, padding: "7px 11px", minWidth: 60, lineHeight: 1 }}>{val}</div>
+                              <div style={{ fontSize: 10, color: "rgba(255,255,255,.4)", marginTop: 5, textTransform: "uppercase", letterSpacing: ".06em" }}>{["hours","min","sec"][i]}</div>
+                            </div>
+                          </React.Fragment>
+                        ))}
+                      </div>
+                      <button onClick={launchCampaign} style={{ width: "100%", background: S.blue, color: "#fff", border: "none", padding: 16, borderRadius: 12, fontFamily: "Georgia, serif", fontSize: 17, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>Launch Campaign →</button>
+                    </div>
+                    <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: "14px 16px", display: "flex", gap: 10 }}>
+                      <span style={{ fontSize: 18 }}>⚠️</span>
+                      <div style={{ fontSize: 13, color: "#92400E", lineHeight: 1.5 }}><strong>No pre-testing detected.</strong> This campaign has not been simulated against audience segments. Launch at your own risk.</div>
+                    </div>
+                  </div>
+                </div>
+                {chaos && (
+                  <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(15,23,42,.96)", overflowY: "auto", animation: "fadeIn .3s ease" }}>
+                    <div style={{ maxWidth: 720, margin: "0 auto", padding: "52px 24px" }}>
+                      <div style={{ textAlign: "center", marginBottom: 36 }}>
+                        <div style={{ fontFamily: "Georgia, serif", fontSize: 32, fontWeight: 800, color: "#fff", marginBottom: 8 }}>🔴 Campaign is Live</div>
+                        <div style={{ fontSize: 14, color: "rgba(255,255,255,.45)" }}>Real-time reaction feed — first 4 hours</div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+                        {[{ label: "Engagement Rate", val: "1.2%", style: { color: "#FCA5A5" } }, { label: "Sentiment Score", val: "38% positive", style: { color: "#FCD34D" } }].map((s, i) => (
+                          <div key={i} style={{ background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, padding: 20 }}>
+                            <div style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 6 }}>{s.label}</div>
+                            <div style={{ fontFamily: "Georgia, serif", fontSize: 28, fontWeight: 800, ...s.style }}>{s.val}</div>
+                          </div>
+                        ))}
+                        <div style={{ gridColumn: "span 2", background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.1)", borderRadius: 12, padding: 20 }}>
+                          <div style={{ fontSize: 11, fontWeight: 500, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>Backlash Risk</div>
+                          <span className="pulseBadge" style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(239,68,68,.2)", border: "1px solid rgba(239,68,68,.4)", color: "#FCA5A5", fontSize: 13, fontWeight: 600, padding: "6px 14px", borderRadius: 6 }}>● HIGH — Escalating</span>
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 28 }}>
+                        {COMMENTS.map(c => (
+                          <div key={c.id} style={{ background: "rgba(255,255,255,.05)", borderLeft: `3px solid ${c.type === "neutral" ? S.amber : S.red}`, borderRadius: "0 10px 10px 0", padding: "14px 16px", transition: "all .4s", opacity: visibleComments.includes(c.id) ? 1 : 0, transform: visibleComments.includes(c.id) ? "translateX(0)" : "translateX(-20px)" }}>
+                            <div style={{ fontSize: 11, fontWeight: 600, color: "rgba(255,255,255,.4)", marginBottom: 5, textTransform: "uppercase", letterSpacing: ".06em" }}>{c.user}</div>
+                            <div style={{ fontSize: 14, color: "rgba(255,255,255,.85)", lineHeight: 1.5 }}>{c.text}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <button onClick={() => goTo(2)} style={{ width: "100%", background: "#fff", color: S.g900, border: "none", padding: 16, borderRadius: 12, fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>See the Cost of This Mistake →</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* SCREEN 2 */}
+            {screen === 2 && (
+              <div style={{ background: "#fff", minHeight: "calc(100vh - 56px)" }}>
+                <div style={{ maxWidth: 820, margin: "0 auto", padding: "64px 28px", textAlign: "center" }} className="fadeIn">
+                  <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".12em", textTransform: "uppercase", color: S.red, marginBottom: 20 }}>📰 Media Coverage — 72 Hours Later</div>
+                  <div style={{ background: S.redPale, border: "1px solid #FECACA", borderRadius: 12, padding: "28px 32px", marginBottom: 48, position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", top: -14, left: 14, fontSize: 90, color: "#FECACA", fontFamily: "Georgia, serif", lineHeight: 1, userSelect: "none" }}>"</div>
+                    <div style={{ fontFamily: "Georgia, serif", fontSize: 22, fontWeight: 700, color: S.red, position: "relative", zIndex: 1 }}>SHEIN's Halloween Campaign Sparks Backlash Over Fast Fashion Waste</div>
+                    <div style={{ fontSize: 12, color: S.g400, marginTop: 8 }}>— Business of Fashion, Vox, AdAge & 34 others</div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 52 }}>
+                    {[{ icon: "💸", label: "Estimated PR Crisis Cost", val: "$1.8M", desc: "Influencer cancellations, ad pull & damage control" }, { icon: "📉", label: "Brand Trust Drop", val: "−22%", desc: "Among 18–30 consumers (YouGov, post-campaign)" }].map((c, i) => (
+                      <div key={i} style={{ border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: "28px 22px", textAlign: "left", position: "relative", overflow: "hidden" }}>
+                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: 3, background: S.red }} />
+                        <div style={{ fontSize: 28, marginBottom: 16 }}>{c.icon}</div>
+                        <div style={{ fontSize: 12, fontWeight: 500, color: S.g400, textTransform: "uppercase", letterSpacing: ".08em", marginBottom: 8 }}>{c.label}</div>
+                        <div style={{ fontFamily: "Georgia, serif", fontSize: 40, fontWeight: 800, color: S.red, lineHeight: 1 }}>{c.val}</div>
+                        <div style={{ fontSize: 13, color: S.g400, marginTop: 8 }}>{c.desc}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={() => goTo(3)} style={{ background: S.g900, color: "#fff", border: "none", padding: "17px 36px", borderRadius: 12, fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 10 }}>✦ What if we tested this first?</button>
+                </div>
+              </div>
+            )}
+
+            {/* SCREEN 3 */}
+            {screen === 3 && <Screen3 S={S} simulating={simulating} showResults={showResults} showSegments={showSegments} showAnalysis={showAnalysis} showNextBtn={showNextBtn} runSimulation={runSimulation} fillColor={fillColor} goTo={goTo} />}
+
+            {/* SCREEN 4 */}
+            {screen === 4 && (
+              <div style={{ background: "#fff", minHeight: "calc(100vh - 56px)" }}>
+                <div style={{ maxWidth: 1020, margin: "0 auto", padding: "48px 28px" }} className="fadeIn">
+                  <div style={{ textAlign: "center", marginBottom: 36 }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, letterSpacing: ".1em", textTransform: "uppercase", color: S.blue, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                      <span style={{ width: 6, height: 6, background: S.blue, borderRadius: "50%", display: "inline-block" }} />After AI Optimization
+                    </div>
+                    <h2 style={{ fontFamily: "Georgia, serif", fontSize: 34, fontWeight: 800, marginBottom: 8 }}>Your Revised Campaign</h2>
+                    <p style={{ fontSize: 15, color: S.g500 }}>Updated messaging with clearer value props, audience-tuned language, and reduced backlash risk.</p>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 36 }}>
+                    {[
+                      { header: "✕ Before — Original Messaging", headerBg: S.redPale, headerColor: S.red, borderColor: "#FECACA", copy: '"Spook-Tacular Deals Are Ready to Take Over Your Halloween — Shop at SHEIN with Amazing Offers. #SHEINHalloweenDeals"', stats: [{ label: "Engagement Rate", val: "1.2%", color: S.red }, { label: "Sentiment", val: "38% positive", color: S.red }], riskLabel: "HIGH", riskBg: "#FEE2E2", riskColor: S.red },
+                      { header: "✓ After — Optimized Messaging", headerBg: S.greenPale, headerColor: S.green, borderColor: "#A7F3D0", copy: '"This Halloween, shop styles you\'ll actually keep. SHEIN\'s Halloween edit — real looks, real prices, made to last past Oct 31. See our quality promise. #SHEINHalloweenDeals"', stats: [{ label: "Engagement Rate", val: "4.1%", color: S.green }, { label: "Sentiment", val: "71% positive", color: S.green }], riskLabel: "LOW", riskBg: S.greenPale, riskColor: S.green },
+                    ].map((c, i) => (
+                      <div key={i} style={{ border: `1.5px solid ${c.borderColor}`, borderRadius: 16, overflow: "hidden" }}>
+                        <div style={{ padding: "15px 22px", background: c.headerBg, fontSize: 12, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".08em", color: c.headerColor }}>{c.header}</div>
+                        <div style={{ padding: 22, background: "#fff" }}>
+                          <div style={{ fontSize: 14, color: S.g700, lineHeight: 1.7, fontStyle: "italic", marginBottom: 20, paddingBottom: 20, borderBottom: `1px solid ${S.g100}` }}>{c.copy}</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                            {c.stats.map(s => (
+                              <div key={s.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                                <span style={{ fontSize: 13, color: S.g500 }}>{s.label}</span>
+                                <span style={{ fontFamily: "Georgia, serif", fontSize: 18, fontWeight: 800, color: s.color }}>{s.val}</span>
+                              </div>
+                            ))}
+                            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                              <span style={{ fontSize: 13, color: S.g500 }}>Backlash Risk</span>
+                              <span style={{ fontSize: 11, fontWeight: 600, padding: "4px 12px", borderRadius: 20, letterSpacing: ".06em", textTransform: "uppercase", background: c.riskBg, color: c.riskColor }}>{c.riskLabel}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ background: S.g900, borderRadius: 20, padding: "64px 32px", textAlign: "center", position: "relative", overflow: "hidden" }}>
+                    <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 30% 50%,rgba(37,99,235,.28) 0%,transparent 60%),radial-gradient(ellipse at 70% 50%,rgba(79,70,229,.2) 0%,transparent 60%)" }} />
+                    <div style={{ fontFamily: "Georgia, serif", fontSize: 52, fontWeight: 800, color: "#fff", lineHeight: 1.2, marginBottom: 14, position: "relative", zIndex: 1 }}>Don't guess.<br /><span style={{ color: S.blueLight }}>Simulate.</span></div>
+                    <div style={{ fontSize: 16, color: "rgba(255,255,255,.5)", marginBottom: 36, position: "relative", zIndex: 1 }}>CampaignIQ pre-tests your campaign across 20+ audience segments before a single dollar is spent.</div>
+                    <div style={{ display: "flex", gap: 12, justifyContent: "center", position: "relative", zIndex: 1 }}>
+                      <button onClick={() => goTo(1)} style={{ background: S.blue, color: "#fff", border: "none", padding: "15px 40px", borderRadius: 12, fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>Start Over →</button>
+                      <button onClick={() => goTo(5)} style={{ background: "rgba(255,255,255,.1)", color: "#fff", border: "1px solid rgba(255,255,255,.2)", padding: "15px 40px", borderRadius: 12, fontFamily: "Georgia, serif", fontSize: 16, fontWeight: 700, cursor: "pointer" }}>🧠 Run Focus Group →</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* SCREEN 5 */}
+            {screen === 5 && <Screen5 S={S} />}
+
+            {/* SCREEN 6 — HOW IT WORKS */}
+            {screen === 6 && (
+              <div style={{ background: S.g50, minHeight: "calc(100vh - 56px)" }}>
+                <div style={{ maxWidth: 1020, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+
+                  {/* Header */}
+                  <div style={{ textAlign: "center", marginBottom: 48 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: ".12em", textTransform: "uppercase", color: S.blue, marginBottom: 14, display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+                      <span style={{ display: "inline-block", width: 24, height: 1.5, background: S.g200 }} />
+                      How CampaignIQ Works
+                      <span style={{ display: "inline-block", width: 24, height: 1.5, background: S.g200 }} />
+                    </div>
+                    <h2 style={{ fontFamily: "Georgia, serif", fontSize: 38, fontWeight: 800, color: S.g900, lineHeight: 1.15, marginBottom: 16, maxWidth: 640, margin: "0 auto 16px" }}>
+                      From campaign brief to synthetic audience insight
+                    </h2>
+                    <p style={{ fontSize: 15, color: S.g500, lineHeight: 1.7, maxWidth: 580, margin: "0 auto" }}>
+                      <strong style={{ color: S.g700 }}>CampaignIQ</strong> combines structured audience inputs with staged language-model generation to simulate likely audience reactions before launch.
+                    </p>
+                  </div>
+
+                  {/* 2-column card grid */}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 20 }}>
+
+                    {/* Card 1 — Inputs */}
+                    <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: "28px 32px", boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                        <div style={{ width: 36, height: 36, background: S.bluePale, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={S.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: S.g900 }}>Inputs</div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                        {["Audience demographics", "Psychographics", "Campaign brief", "Simulation settings"].map(item => (
+                          <div key={item} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: S.g700 }}>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={S.blue} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ borderTop: `1px solid ${S.g100}`, paddingTop: 16 }}>
+                        <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.65 }}>These inputs define who the <strong style={{ color: S.g700 }}>audience is</strong>, how they think, and how the simulation should run.</p>
+                      </div>
+                    </div>
+
+                    {/* Card 2 — AI Pipeline */}
+                    <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: "28px 32px", boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                        <div style={{ width: 36, height: 36, background: S.bluePale, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={S.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: S.g900 }}>AI Pipeline</div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 20 }}>
+                        {[
+                          { n: "1", title: "Persona generation", desc: "Create synthetic audience members based on selected traits." },
+                          { n: "2", title: "Group discussion simulation", desc: "Generate reactions, agreements, disagreements, and objections." },
+                          { n: "3", title: "Insight extraction", desc: "Summarize what resonates, what feels off, and what should be revised." },
+                        ].map(step => (
+                          <div key={step.n} style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                            <div style={{ width: 22, height: 22, borderRadius: "50%", background: S.g100, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: S.g500, flexShrink: 0, marginTop: 1 }}>{step.n}</div>
+                            <div>
+                              <div style={{ fontSize: 14, fontWeight: 600, color: S.g900, marginBottom: 3 }}>{step.title}</div>
+                              <div style={{ fontSize: 13, color: S.g500, lineHeight: 1.5 }}>{step.desc}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ borderTop: `1px solid ${S.g100}`, paddingTop: 16 }}>
+                        <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.65 }}>The system first creates personas, then simulates discussion, and finally turns that discussion into structured feedback.</p>
+                      </div>
+                    </div>
+
+                    {/* Card 3 — Model Logic */}
+                    <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: "28px 32px", boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                        <div style={{ width: 36, height: 36, background: S.bluePale, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={S.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 7h.01M12 7h.01M17 7h.01M7 11h10"/></svg>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: S.g900 }}>Model Logic</div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                        {["LLM + transformer-based text generation", "Structured prompting", "Multi-step generation instead of one-shot"].map(item => (
+                          <div key={item} style={{ display: "flex", alignItems: "flex-start", gap: 10, fontSize: 14, color: S.g700 }}>
+                            <svg style={{ flexShrink: 0, marginTop: 2 }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={S.blue} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ borderTop: `1px solid ${S.g100}`, paddingTop: 16 }}>
+                        <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.65 }}>Breaking the task into stages helps make outputs more grounded, consistent, and easier to interpret.</p>
+                      </div>
+                    </div>
+
+                    {/* Card 4 — Build Stack */}
+                    <div style={{ background: "#fff", border: `1.5px solid ${S.g200}`, borderRadius: 16, padding: "28px 32px", boxShadow: "0 2px 8px rgba(0,0,0,.04)" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20 }}>
+                        <div style={{ width: 36, height: 36, background: S.bluePale, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={S.blue} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+                        </div>
+                        <div style={{ fontSize: 16, fontWeight: 700, color: S.g900 }}>Build Stack</div>
+                      </div>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
+                        {["Vibe coding tools", "Front-end interface", "AI API / model service", "Rapid prototyping workflow"].map(item => (
+                          <div key={item} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, color: S.g700 }}>
+                            <svg style={{ flexShrink: 0 }} width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={S.blue} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{ borderTop: `1px solid ${S.g100}`, paddingTop: 16 }}>
+                        <p style={{ fontSize: 13, color: S.g500, lineHeight: 1.65 }}>We used AI-assisted prototyping tools to build and iterate on the interface quickly while focusing on the core simulation experience.</p>
+                      </div>
+                    </div>
+
+                  </div>
+
+                  {/* Bottom CTA strip */}
+                  <div style={{ marginTop: 36, background: S.bluePale, border: `1.5px solid #BFDBFE`, borderRadius: 14, padding: "22px 32px", display: "flex", alignItems: "center", justifyContent: "space-between", gap: 20 }}>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: S.g900, marginBottom: 4 }}>Ready to see it in action?</div>
+                      <div style={{ fontSize: 13, color: S.g500 }}>Walk through the full simulation flow — from campaign brief to audience insights.</div>
+                    </div>
+                    <div style={{ display: "flex", gap: 10, flexShrink: 0 }}>
+                      <button onClick={() => goTo(1)} style={{ background: S.blue, color: "#fff", border: "none", padding: "11px 24px", borderRadius: 10, fontFamily: "Georgia, serif", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>Start the Demo →</button>
+                      <button onClick={() => goTo(5)} style={{ background: "#fff", color: S.blue, border: `1.5px solid #BFDBFE`, padding: "11px 24px", borderRadius: 10, fontFamily: "Georgia, serif", fontSize: 14, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}>🧠 Run Focus Group</button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>

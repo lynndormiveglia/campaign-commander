@@ -42,7 +42,7 @@ const F = {
 };
 
 /* ===========================================================
-   Sample campaigns (decorative auto-scrolling marquee)
+   Sample campaigns (decorative manual carousel on the launch hero)
    =========================================================== */
 type SampleCampaign = { id: string; badge: string; title: string; emoji: string; gradient: string };
 const SAMPLE_CAMPAIGNS: SampleCampaign[] = [
@@ -109,6 +109,7 @@ export default function CampaignSimulator() {
   const [screen, setScreen] = useState(1);
   const [chaos, setChaos] = useState(false);
   const [visibleComments, setVisibleComments] = useState<number[]>([]);
+  const [carouselIdx, setCarouselIdx] = useState(0);
 
   const [plan, setPlan] = useState<CampaignPlan>(DEFAULT_PLAN);
   const [customPersonas, setCustomPersonas] = useState<Persona[]>([]);
@@ -204,7 +205,6 @@ export default function CampaignSimulator() {
         @keyframes ciq-fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
         @keyframes ciq-pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
         @keyframes loadDot { 0%,80%,100%{opacity:.2;transform:scale(.8)} 40%{opacity:1;transform:scale(1)} }
-        @keyframes ciq-marquee { from{transform:translateX(0)} to{transform:translateX(-50%)} }
         .ciq .dot1{animation:loadDot 1.2s ease-in-out infinite}
         .ciq .dot2{animation:loadDot 1.2s ease-in-out .2s infinite}
         .ciq .dot3{animation:loadDot 1.2s ease-in-out .4s infinite}
@@ -213,8 +213,11 @@ export default function CampaignSimulator() {
         .ciq input:focus, .ciq textarea:focus, .ciq select:focus{outline:none; border-color:${C.ink} !important; background:#fff}
         .ciq button{transition:all .15s ease}
         .ciq button:hover:not(:disabled){transform:translateY(-1px)}
-        .marquee-track{display:flex;gap:14px;width:max-content;animation:ciq-marquee 40s linear infinite}
-        .marquee-mask{mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+        .ciq-carousel-track{display:flex;gap:14px;transition:transform .45s cubic-bezier(.22,.61,.36,1)}
+        .ciq-carousel-mask{position:relative;overflow:hidden;padding:0 18px}
+        .ciq-carousel-mask::before,.ciq-carousel-mask::after{content:"";position:absolute;top:0;bottom:0;width:80px;pointer-events:none;z-index:2}
+        .ciq-carousel-mask::before{left:0;background:linear-gradient(90deg,${C.bg} 0%,${C.bg} 18%,rgba(250,250,249,0) 100%)}
+        .ciq-carousel-mask::after{right:0;background:linear-gradient(270deg,${C.bg} 0%,${C.bg} 18%,rgba(250,250,249,0) 100%)}
       `}</style>
 
       <div className="ciq">
@@ -321,7 +324,7 @@ export default function CampaignSimulator() {
               </div>
             </div>
 
-            {/* Decorative auto-scroll marquee */}
+            {/* Manual carousel (arrows + edge gradient fade) */}
             <div style={{ paddingBottom: 24 }}>
               <div style={{
                 fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".15em",
@@ -329,23 +332,12 @@ export default function CampaignSimulator() {
               }}>
                 In your queue
               </div>
-              <div className="marquee-mask" style={{ overflow: "hidden" }}>
-                <div className="marquee-track">
-                  {[...SAMPLE_CAMPAIGNS, ...SAMPLE_CAMPAIGNS].map((c, i) => (
-                    <div key={`${c.id}-${i}`} aria-hidden style={{
-                      width: 240, flexShrink: 0,
-                      background: C.surface, border: `1px solid ${C.line}`,
-                      borderRadius: 12, overflow: "hidden",
-                    }}>
-                      <div style={{ height: 70, background: c.gradient, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>{c.emoji}</div>
-                      <div style={{ padding: "10px 14px" }}>
-                        <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>{c.badge}</div>
-                        <div style={{ fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.3 }}>{c.title}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+              <CampaignCarousel
+                items={SAMPLE_CAMPAIGNS}
+                index={carouselIdx}
+                onPrev={() => setCarouselIdx((i) => (i - 1 + SAMPLE_CAMPAIGNS.length) % SAMPLE_CAMPAIGNS.length)}
+                onNext={() => setCarouselIdx((i) => (i + 1) % SAMPLE_CAMPAIGNS.length)}
+              />
             </div>
 
             {/* Crisis overlay */}
@@ -402,16 +394,14 @@ export default function CampaignSimulator() {
         )}
 
         {/* =====================================================
-            SCREEN 2 — CRISIS (color minimized, underline-only red)
+            SCREEN 2 — CRISIS (underlines only on negative words)
            ===================================================== */}
         {screen === 2 && (
           <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
             <div style={{ maxWidth: 820, margin: "0 auto", padding: "80px 28px", textAlign: "center" }} className="fadeIn">
               <div style={{
                 fontFamily: F.mono, fontSize: 11, fontWeight: 500, letterSpacing: ".15em",
-                color: C.ink, marginBottom: 24,
-                textDecoration: "underline", textDecorationColor: C.bad, textUnderlineOffset: 5, textDecorationThickness: 2,
-                display: "inline-block",
+                color: C.muted, marginBottom: 24, display: "inline-block",
               }}>MEDIA COVERAGE — 72 HOURS LATER</div>
               <div style={{
                 background: C.surface, border: `1px solid ${C.line}`,
@@ -420,10 +410,9 @@ export default function CampaignSimulator() {
                 <div style={{
                   fontFamily: F.display, fontSize: 24, fontWeight: 600,
                   color: C.ink, letterSpacing: "-0.02em", lineHeight: 1.3,
-                  textDecoration: "underline", textDecorationColor: C.bad,
-                  textUnderlineOffset: 6, textDecorationThickness: 2,
-                  display: "inline",
-                }}>Brand Faces Backlash After Tone-Deaf Sustainability Campaign</div>
+                }}>
+                  Brand Faces <NegWord>Backlash</NegWord> After <NegWord>Tone-Deaf</NegWord> Sustainability Campaign
+                </div>
                 <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, marginTop: 14, letterSpacing: ".05em" }}>— TechCrunch · The Guardian · AdAge & 47 others</div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 52 }}>
@@ -435,9 +424,7 @@ export default function CampaignSimulator() {
                     <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 10 }}>{c.label}</div>
                     <div style={{
                       fontFamily: F.display, fontSize: 40, fontWeight: 700,
-                      color: C.ink, lineHeight: 1, letterSpacing: "-0.02em",
-                      textDecoration: "underline", textDecorationColor: C.bad,
-                      textUnderlineOffset: 6, textDecorationThickness: 3,
+                      color: C.bad, lineHeight: 1, letterSpacing: "-0.02em",
                       display: "inline-block",
                     }}>{c.val}</div>
                     <div style={{ fontSize: 13, color: C.muted, marginTop: 10 }}>{c.desc}</div>
@@ -605,57 +592,15 @@ export default function CampaignSimulator() {
         )}
 
         {/* =====================================================
-            SCREEN 4 — FOCUS GROUP (live discussion view)
+            SCREEN 4 — FOCUS GROUP (real persona discussion)
            ===================================================== */}
         {screen === 4 && (
-          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
-            <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
-              <div style={{ marginBottom: 30 }}>
-                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● SYNTHETIC FOCUS GROUP</div>
-                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>Round-table reactions.</h2>
-                <p style={{ fontSize: 15, color: C.muted, maxWidth: 620 }}>
-                  Hear each VALS segment respond in their own voice — followed by your custom personas.
-                </p>
-              </div>
-
-              {!simResult ? (
-                <EmptyState onAction={() => goTo(3)} />
-              ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 320px", gap: 24, alignItems: "start" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                    {simResult.personas.map((p, i) => (
-                      <FocusGroupRow key={`fg-${i}`} persona={p} side={i % 2 === 0 ? "left" : "right"} />
-                    ))}
-                    {customPersonas.map((p, i) => (
-                      <FocusGroupRow key={`fg-c-${i}`} persona={p} side={i % 2 === 0 ? "right" : "left"} custom />
-                    ))}
-                  </div>
-                  <aside style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22, position: "sticky", top: 76 }}>
-                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 12 }}>Session Summary</div>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                      <SummaryRow label="Participants" val={`${simResult.personas.length + customPersonas.length}`} />
-                      <SummaryRow label="Avg sentiment" val={`${avgSentiment(simResult.personas, customPersonas)}%`} />
-                      <SummaryRow label="Risk band" val={simResult.risk} />
-                    </div>
-                    <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 16, paddingTop: 14 }}>
-                      <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 8 }}>Tone</div>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {simResult.tones.map((t) => (
-                          <span key={t} style={{
-                            fontFamily: F.mono, fontSize: 11, color: C.ink,
-                            background: C.lineSoft, padding: "4px 10px", borderRadius: 999,
-                          }}>{t}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <button onClick={() => goTo(5)} style={{ ...primaryBtnStyle(), width: "100%", marginTop: 18 }}>
-                      Review & fix →
-                    </button>
-                  </aside>
-                </div>
-              )}
-            </div>
-          </div>
+          <FocusGroupScreen
+            simResult={simResult}
+            customPersonas={customPersonas}
+            onGoSimulate={() => goTo(3)}
+            onGoResults={() => goTo(5)}
+          />
         )}
 
         {/* =====================================================
@@ -923,6 +868,81 @@ function CampaignFormCard({
 /* ===========================================================
    Sub-components
    =========================================================== */
+function NegWord({ children }: { children: React.ReactNode }) {
+  return (
+    <span style={{
+      color: C.bad,
+      textDecoration: "underline",
+      textDecorationColor: C.bad,
+      textUnderlineOffset: 5,
+      textDecorationThickness: 2,
+    }}>{children}</span>
+  );
+}
+
+function CampaignCarousel({
+  items, index, onPrev, onNext,
+}: {
+  items: SampleCampaign[];
+  index: number;
+  onPrev: () => void;
+  onNext: () => void;
+}) {
+  const CARD_W = 240;
+  const GAP = 14;
+  const STEP = CARD_W + GAP;
+  const arrowBtn: React.CSSProperties = {
+    position: "absolute", top: "50%", transform: "translateY(-50%)",
+    width: 38, height: 38, borderRadius: "50%",
+    background: C.surface, border: `1px solid ${C.line}`,
+    color: C.ink, fontFamily: F.mono, fontSize: 16, fontWeight: 600,
+    cursor: "pointer", zIndex: 3,
+    boxShadow: "0 4px 14px rgba(0,0,0,.06)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+  };
+  return (
+    <div style={{ position: "relative", maxWidth: 980, margin: "0 auto" }}>
+      <button aria-label="Previous campaign" onClick={onPrev} style={{ ...arrowBtn, left: 6 }}>‹</button>
+      <button aria-label="Next campaign" onClick={onNext} style={{ ...arrowBtn, right: 6 }}>›</button>
+      <div className="ciq-carousel-mask">
+        <div
+          className="ciq-carousel-track"
+          style={{ transform: `translateX(calc(50% - ${CARD_W / 2}px - ${index * STEP}px))` }}
+        >
+          {items.map((c, i) => {
+            const active = i === index;
+            return (
+              <div key={c.id} aria-hidden={!active} style={{
+                width: CARD_W, flexShrink: 0,
+                background: C.surface, border: `1px solid ${C.line}`,
+                borderRadius: 12, overflow: "hidden",
+                opacity: active ? 1 : 0.55,
+                transform: active ? "scale(1)" : "scale(0.95)",
+                transition: "opacity .35s ease, transform .35s ease",
+              }}>
+                <div style={{ height: 70, background: c.gradient, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26 }}>{c.emoji}</div>
+                <div style={{ padding: "10px 14px" }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>{c.badge}</div>
+                  <div style={{ fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", lineHeight: 1.3 }}>{c.title}</div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      <div style={{ display: "flex", justifyContent: "center", gap: 6, marginTop: 12 }}>
+        {items.map((_, i) => (
+          <span key={i} aria-hidden style={{
+            width: i === index ? 18 : 6, height: 6, borderRadius: 3,
+            background: i === index ? C.ink : C.line,
+            transition: "all .3s ease",
+          }} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onRemove?: () => void; customBadge?: boolean }) {
   return (
     <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, padding: 14, background: C.bg }}>
@@ -934,7 +954,10 @@ function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onR
               <span style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, background: C.lineSoft, padding: "2px 6px", borderRadius: 4, letterSpacing: ".06em" }}>CUSTOM</span>
             )}
           </div>
-          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>{persona.archetype} · {persona.age}</div>
+          <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
+            {persona.age}{persona.job ? ` · ${persona.job}` : ""}
+          </div>
+          <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 4, letterSpacing: ".02em" }}>{persona.archetype}</div>
         </div>
         {onRemove && (
           <button onClick={onRemove} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 14, padding: 2 }}>✕</button>
@@ -954,51 +977,335 @@ function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onR
   );
 }
 
-function FocusGroupRow({ persona, side, custom }: { persona: Persona; side: "left" | "right"; custom?: boolean }) {
-  const isLeft = side === "left";
+function FocusGroupScreen({
+  simResult, customPersonas, onGoSimulate, onGoResults,
+}: {
+  simResult: SimulationResult | null;
+  customPersonas: Persona[];
+  onGoSimulate: () => void;
+  onGoResults: () => void;
+}) {
+  const [tab, setTab] = useState<"transcript" | "personas">("transcript");
+
+  const allPersonas: Array<{ persona: Persona; custom: boolean }> = useMemo(() => [
+    ...(simResult?.personas ?? []).map((p) => ({ persona: p, custom: false })),
+    ...customPersonas.map((p) => ({ persona: p, custom: true })),
+  ], [simResult, customPersonas]);
+
+  const transcript = useMemo(() => buildTranscript(allPersonas.map((x) => x.persona)), [allPersonas]);
+  const avg = simResult ? avgSentiment(simResult.personas, customPersonas) : 0;
+
   return (
-    <div style={{ display: "flex", justifyContent: isLeft ? "flex-start" : "flex-end" }}>
-      <div style={{
-        maxWidth: "82%", display: "flex", gap: 12,
-        flexDirection: isLeft ? "row" : "row-reverse",
-      }}>
-        <div style={{
-          width: 40, height: 40, borderRadius: "50%",
-          background: C.ink, color: C.accentInk,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontFamily: F.display, fontWeight: 700, fontSize: 14, flexShrink: 0,
-        }}>{persona.name.slice(0, 1).toUpperCase()}</div>
-        <div>
-          <div style={{
-            display: "flex", alignItems: "center", gap: 8, marginBottom: 4,
-            justifyContent: isLeft ? "flex-start" : "flex-end",
-          }}>
-            <span style={{ fontFamily: F.display, fontSize: 13, fontWeight: 600 }}>{persona.name}</span>
-            <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".05em" }}>{persona.age}</span>
-            {custom && <span style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, background: C.lineSoft, padding: "1px 6px", borderRadius: 4 }}>CUSTOM</span>}
-          </div>
-          <div style={{
-            background: C.surface, border: `1px solid ${C.line}`,
-            borderRadius: 14, padding: "12px 16px",
-            borderTopLeftRadius: isLeft ? 4 : 14,
-            borderTopRightRadius: isLeft ? 14 : 4,
-          }}>
-            <div style={{ fontSize: 14, color: C.ink2, lineHeight: 1.55 }}>"{persona.quote}"</div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
-              <div style={{ flex: 1, height: 3, background: C.lineSoft, borderRadius: 2, overflow: "hidden" }}>
-                <div style={{
-                  height: "100%", width: `${persona.sentiment}%`,
-                  background: persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad,
-                }} />
+    <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● SYNTHETIC FOCUS GROUP</div>
+          <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>Round-table reactions.</h2>
+          <p style={{ fontSize: 15, color: C.muted, maxWidth: 620 }}>
+            Meet your panel. Each participant is a realistic individual grounded in VALS — they react in their own voice and challenge each other.
+          </p>
+        </div>
+
+        {!simResult ? (
+          <EmptyState onAction={onGoSimulate} />
+        ) : (
+          <>
+            {/* Summary bar */}
+            <div style={{
+              background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14,
+              padding: "16px 22px", marginBottom: 18,
+              display: "flex", alignItems: "center", gap: 24, flexWrap: "wrap",
+            }}>
+              <div style={{ display: "flex", gap: 28, flexShrink: 0 }}>
+                <SummaryStat label="Avg sentiment" val={`${avg}%`} tone={avg >= 60 ? "good" : avg >= 40 ? "warn" : "bad"} />
+                <SummaryStat label="Participants" val={`${allPersonas.length}`} />
+                <SummaryStat label="Exchanges" val={`${transcript.length}`} />
+                <SummaryStat label="Risk band" val={simResult.risk} tone={simResult.risk === "LOW" ? "good" : simResult.risk === "MEDIUM" ? "warn" : "bad"} />
               </div>
-              <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".05em" }}>{persona.sentiment}%</div>
+              <div style={{ flex: 1 }} />
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                {simResult.tones.map((t) => (
+                  <span key={t} style={{
+                    fontFamily: F.mono, fontSize: 11, color: C.ink,
+                    background: C.lineSoft, padding: "4px 10px", borderRadius: 999,
+                  }}>{t}</span>
+                ))}
+              </div>
+              <button onClick={onGoResults} style={primaryBtnStyle()}>Review & fix →</button>
             </div>
-            <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 6 }}>{persona.archetype}</div>
+
+            {/* Tabs */}
+            <div style={{
+              display: "inline-flex", gap: 4, marginBottom: 18,
+              background: C.lineSoft, borderRadius: 10, padding: 4,
+            }}>
+              {([
+                ["transcript", "Transcript"],
+                ["personas", "Personas"],
+              ] as const).map(([v, l]) => (
+                <button key={v} onClick={() => setTab(v)} style={{
+                  padding: "7px 16px", borderRadius: 7, border: "none",
+                  fontFamily: F.body, fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  background: tab === v ? C.surface : "transparent",
+                  color: tab === v ? C.ink : C.muted,
+                  boxShadow: tab === v ? "0 1px 3px rgba(0,0,0,.06)" : "none",
+                }}>{l}</button>
+              ))}
+            </div>
+
+            {tab === "transcript" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 240px", gap: 20, alignItems: "start" }}>
+                <div style={{
+                  background: C.surface, border: `1px solid ${C.line}`,
+                  borderRadius: 14, padding: 26,
+                }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 22 }}>
+                    Focus Group Discussion
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+                    {transcript.map((line, i) => {
+                      if (line.type === "moderator") {
+                        return (
+                          <div key={i} style={{ display: "flex", justifyContent: "center" }}>
+                            <div style={{
+                              background: C.bg, border: `1px dashed ${C.line}`, borderRadius: 10,
+                              padding: "8px 14px", fontFamily: F.mono, fontSize: 11,
+                              color: C.muted, fontStyle: "italic", maxWidth: "70%", textAlign: "center",
+                              letterSpacing: ".02em",
+                            }}>📋 {line.text}</div>
+                          </div>
+                        );
+                      }
+                      const idx = allPersonas.findIndex((x) => x.persona.name === line.speaker);
+                      const persona = idx >= 0 ? allPersonas[idx].persona : null;
+                      const isLeft = idx % 2 === 0;
+                      const initials = (line.speaker.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
+                      return (
+                        <div key={i} style={{
+                          display: "flex", flexDirection: "column",
+                          alignItems: isLeft ? "flex-start" : "flex-end", gap: 4,
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <div style={{
+                              width: 24, height: 24, borderRadius: 6,
+                              background: avatarBg(idx), color: C.ink,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontFamily: F.display, fontSize: 10, fontWeight: 700, letterSpacing: ".02em",
+                            }}>{initials}</div>
+                            <span style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: C.ink, letterSpacing: ".05em", textTransform: "uppercase" }}>{line.speaker}</span>
+                            {persona && (
+                              <span style={{ fontFamily: F.mono, fontSize: 10, color: C.faint }}>· {persona.job || persona.age}</span>
+                            )}
+                          </div>
+                          <div style={{
+                            padding: "12px 16px",
+                            borderRadius: isLeft ? "4px 14px 14px 14px" : "14px 4px 14px 14px",
+                            fontSize: 14, lineHeight: 1.6, maxWidth: "82%",
+                            background: isLeft ? C.surface : C.ink,
+                            color: isLeft ? C.ink : C.accentInk,
+                            border: isLeft ? `1px solid ${C.line}` : "none",
+                          }}>{line.text}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <aside style={{ position: "sticky", top: 76 }}>
+                  <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>Panel</div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {allPersonas.map(({ persona, custom }, i) => {
+                      const tone = persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad;
+                      const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
+                      return (
+                        <div key={`panel-${i}`} style={{
+                          background: C.surface, border: `1px solid ${C.line}`,
+                          borderRadius: 10, padding: "10px 12px",
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                            <div style={{
+                              width: 28, height: 28, borderRadius: 7,
+                              background: avatarBg(i), color: C.ink,
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              fontFamily: F.display, fontSize: 11, fontWeight: 700,
+                            }}>{initials}</div>
+                            <div style={{ minWidth: 0, flex: 1 }}>
+                              <div style={{ fontFamily: F.display, fontSize: 12, fontWeight: 700, letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: 6 }}>
+                                {persona.name.split(" ")[0]}
+                                {custom && <span style={{ fontFamily: F.mono, fontSize: 8, color: C.muted, background: C.lineSoft, padding: "1px 5px", borderRadius: 3 }}>CUSTOM</span>}
+                              </div>
+                              <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint }}>{persona.age?.replace(/\s*\(.+?\)/, "")} · {persona.job || "—"}</div>
+                            </div>
+                          </div>
+                          <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${persona.sentiment}%`, background: tone, borderRadius: 2 }} />
+                          </div>
+                          <div style={{ fontFamily: F.mono, fontSize: 10, color: tone, fontWeight: 600, marginTop: 4 }}>{persona.sentiment}% sentiment</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </aside>
+              </div>
+            )}
+
+            {tab === "personas" && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
+                {allPersonas.map(({ persona, custom }, i) => (
+                  <FocusPersonaCard key={`fp-${i}`} persona={persona} custom={custom} index={i} />
+                ))}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FocusPersonaCard({ persona, custom, index }: { persona: Persona; custom: boolean; index: number }) {
+  const tone = persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad;
+  const toneSoft = persona.sentiment >= 60 ? C.goodSoft : persona.sentiment >= 40 ? C.warnSoft : C.badSoft;
+  const label = persona.sentiment >= 60 ? "Positive" : persona.sentiment >= 40 ? "Mixed" : "Skeptical";
+  const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
+  return (
+    <div style={{
+      background: C.surface, border: `1px solid ${C.line}`,
+      borderRadius: 14, padding: 20, position: "relative", overflow: "hidden",
+    }}>
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14 }}>
+        <div style={{
+          width: 44, height: 44, borderRadius: 12,
+          background: avatarBg(index), color: C.ink,
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontFamily: F.display, fontSize: 16, fontWeight: 700,
+        }}>{initials}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            {persona.name}
+            {custom && <span style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, background: C.lineSoft, padding: "2px 6px", borderRadius: 4 }}>CUSTOM</span>}
           </div>
+          <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, marginTop: 2 }}>
+            {persona.age}{persona.job ? ` · ${persona.job}` : ""}
+          </div>
+        </div>
+        <span style={{
+          padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 600,
+          background: toneSoft, color: tone, fontFamily: F.mono, letterSpacing: ".04em",
+        }}>{label}</span>
+      </div>
+      <p style={{ fontSize: 13, color: C.ink2, lineHeight: 1.6, marginBottom: 12, fontStyle: "italic" }}>
+        "{persona.quote}"
+      </p>
+      {persona.traits && persona.traits.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 14 }}>
+          {persona.traits.map((t) => (
+            <span key={t} style={{
+              padding: "3px 9px", borderRadius: 999, fontSize: 11, fontWeight: 600,
+              background: C.lineSoft, color: C.ink2, fontFamily: F.mono, letterSpacing: ".03em",
+            }}>{t}</span>
+          ))}
+        </div>
+      )}
+      <div>
+        <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".07em", textTransform: "uppercase", marginBottom: 4 }}>Archetype</div>
+        <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.55 }}>{persona.archetype}</p>
+      </div>
+      <div style={{ marginTop: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+          <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".07em", textTransform: "uppercase" }}>Sentiment</span>
+          <span style={{ fontFamily: F.mono, fontSize: 12, fontWeight: 700, color: tone }}>{persona.sentiment}%</span>
+        </div>
+        <div style={{ height: 6, background: C.lineSoft, borderRadius: 3, overflow: "hidden" }}>
+          <div style={{ height: "100%", background: tone, width: `${persona.sentiment}%`, borderRadius: 3 }} />
         </div>
       </div>
     </div>
   );
+}
+
+function SummaryStat({ label, val, tone }: { label: string; val: string; tone?: "good" | "warn" | "bad" }) {
+  const color = tone === "good" ? C.good : tone === "warn" ? C.warn : tone === "bad" ? C.bad : C.ink;
+  return (
+    <div>
+      <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>{label}</div>
+      <div style={{ fontFamily: F.display, fontSize: 22, fontWeight: 700, color, letterSpacing: "-0.01em", lineHeight: 1 }}>{val}</div>
+    </div>
+  );
+}
+
+const AVATAR_BG_COLORS = ["#FCE7F3", "#DBEAFE", "#DCFCE7", "#FEF3C7", "#EDE9FE", "#FFE4E6"];
+function avatarBg(i: number) {
+  return AVATAR_BG_COLORS[((i % AVATAR_BG_COLORS.length) + AVATAR_BG_COLORS.length) % AVATAR_BG_COLORS.length];
+}
+
+type TranscriptLine =
+  | { type: "moderator"; speaker: "Moderator"; text: string }
+  | { type: "persona"; speaker: string; text: string };
+
+function buildTranscript(personas: Persona[]): TranscriptLine[] {
+  if (personas.length === 0) return [];
+  const lines: TranscriptLine[] = [];
+  lines.push({
+    type: "moderator", speaker: "Moderator",
+    text: "Thanks everyone for joining. Take a moment to react to the campaign. First impressions only.",
+  });
+  personas.forEach((p) => {
+    lines.push({ type: "persona", speaker: p.name, text: p.quote });
+  });
+
+  const sorted = [...personas].sort((a, b) => b.sentiment - a.sentiment);
+  const positive = sorted[0];
+  const negative = sorted[sorted.length - 1];
+  const middle = sorted[Math.floor(sorted.length / 2)];
+
+  if (negative && positive && negative.name !== positive.name) {
+    lines.push({
+      type: "moderator", speaker: "Moderator",
+      text: `${negative.name.split(" ")[0]} — you're more critical here. What's the core objection?`,
+    });
+    lines.push({
+      type: "persona", speaker: negative.name,
+      text: `${followUpCritical(negative)}`,
+    });
+    lines.push({
+      type: "persona", speaker: positive.name,
+      text: `${followUpSupportive(positive, negative)}`,
+    });
+    if (middle && middle.name !== negative.name && middle.name !== positive.name) {
+      lines.push({
+        type: "persona", speaker: middle.name,
+        text: `${followUpMiddle(middle)}`,
+      });
+    }
+  }
+
+  lines.push({
+    type: "moderator", speaker: "Moderator",
+    text: "Last question — what would actually make this campaign better for you?",
+  });
+  personas.forEach((p) => {
+    lines.push({ type: "persona", speaker: p.name, text: closingSuggestion(p) });
+  });
+
+  return lines;
+}
+
+function followUpCritical(p: Persona): string {
+  const trait = p.traits?.[0]?.toLowerCase();
+  if (trait) return `Honestly, as someone who's pretty ${trait}, this just doesn't earn my trust. The copy feels designed around me, not for me.`;
+  return "Honestly, this doesn't earn my trust. The copy feels designed around me, not for me. There's nothing concrete underneath.";
+}
+function followUpSupportive(p: Persona, opp: Persona): string {
+  return `I hear you, ${opp.name.split(" ")[0]}, but I think you're being a bit harsh? It's not perfect, but it gives me something to actually engage with.`;
+}
+function followUpMiddle(p: Persona): string {
+  return `I'm somewhere in the middle. There's a version of this I'd respect — but right now it's trying to do too many things at once.`;
+}
+function closingSuggestion(p: Persona): string {
+  if (p.sentiment >= 60) return "Just keep it specific. Show, don't tell. Less hype, more proof — and I'm in.";
+  if (p.sentiment >= 40) return "Pick a lane. Either commit to a clear message or back it up with real evidence — the middle ground reads as empty.";
+  return "Drop the marketing-speak entirely. Show data, sources, real customers — anything that signals you actually mean it.";
 }
 
 function RiskMeter({ score }: { score: number }) {
@@ -1085,15 +1392,6 @@ function AnchorSelect({ label, value, options, onChange }: {
         <option value="">Select…</option>
         {options.map((o) => <option key={o} value={o}>{o}</option>)}
       </select>
-    </div>
-  );
-}
-
-function SummaryRow({ label, val }: { label: string; val: string }) {
-  return (
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-      <span style={{ fontSize: 12, color: C.muted }}>{label}</span>
-      <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, letterSpacing: "-0.01em" }}>{val}</span>
     </div>
   );
 }

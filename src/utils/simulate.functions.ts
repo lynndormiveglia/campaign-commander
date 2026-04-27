@@ -21,10 +21,12 @@ export type FieldFlag = {
 };
 
 export type Persona = {
-  name: string;
-  archetype: string;
-  age: string;
-  sentiment: number; // 0-100 positive
+  name: string;       // realistic first + last name (e.g. "Zoe Chen")
+  archetype: string;  // VALS type + lifestyle line
+  age: string;        // generational range (e.g. "Gen Z (18–27)")
+  job: string;        // realistic occupation
+  traits: string[];   // 3 short adjectives
+  sentiment: number;  // 0-100 positive
   quote: string;
 };
 
@@ -78,7 +80,14 @@ You will be given a structured campaign plan (name, timeline, key message, hasht
 
 You MUST call the return_simulation tool. Rules:
 - segments: EXACTLY three audience CATEGORIES (NOT individual people) most relevant to the target audience. Each name is a broad consumer category phrased like "Gen Z Fashion Lovers", "Eco-Curious Millennial Parents", "Skeptical Gen X Professionals" — derive these from the VALS framework (Innovators, Thinkers, Achievers, Experiencers, Believers, Strivers, Makers, Survivors) blended with generation. sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
-- personas: 3 broad audience PERSONAS (NOT named individuals) drawn from the target audience using VALS as the primary anchor. The "name" field is a category label like "Gen Z Fashion Lovers" or "Achiever Millennial Parents" — never a person's first name. archetype is the VALS type plus a one-line lifestyle descriptor (e.g. "Achiever · status-driven, success-oriented"). age is a generational range like "Gen Z (18–27)". sentiment 0–100. quote (~120 chars) is the collective voice of that segment.
+- personas: EXACTLY 3 realistic individual focus-group participants who together represent the target audience. Each persona must be grounded in the VALS framework but feel like a believable real person:
+  • name: a realistic first + last name (e.g. "Zoe Chen", "Marcus Webb", "Priya Nair", "Devon Park"). NEVER use category labels.
+  • archetype: their VALS type plus a one-line lifestyle descriptor (e.g. "Achiever · status-driven, success-oriented").
+  • age: generational range like "Gen Z (18–27)" or "Millennials (29–44)".
+  • job: a realistic occupation (e.g. "Grad Student", "Sustainability Consultant", "Creative Director").
+  • traits: an array of EXACTLY 3 short adjectives describing personality (e.g. ["Practical","Vocal","Skeptical"]).
+  • sentiment: 0–100 integer.
+  • quote: ~120 chars in their personal voice reacting to the campaign copy. Make the three personas span clearly different sentiment levels (one supportive, one critical, one in-between) so the panel feels like a real focus group.
 - tones: 2–4 short adjectives describing the copy's emotional tone.
 - risk: LOW / MEDIUM / HIGH. riskScore 0–100 (0 safest, 100 most dangerous) — must agree with risk band: LOW 0–33, MEDIUM 34–66, HIGH 67–100.
 - riskRationale: one sentence.
@@ -163,10 +172,12 @@ ${data.plan.copy}`;
                           name: { type: "string" },
                           archetype: { type: "string" },
                           age: { type: "string" },
+                          job: { type: "string" },
+                          traits: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
                           sentiment: { type: "integer", minimum: 0, maximum: 100 },
                           quote: { type: "string" },
                         },
-                        required: ["name", "archetype", "age", "sentiment", "quote"],
+                        required: ["name", "archetype", "age", "job", "traits", "sentiment", "quote"],
                         additionalProperties: false,
                       },
                     },
@@ -223,11 +234,21 @@ ${data.plan.copy}`;
       const sortedSegments = (parsed.segments ?? []).slice(0, 3);
       if (sortedSegments.length !== 3) return { ok: false, error: "Incomplete segments. Try again." };
 
+      const cleanedPersonas: Persona[] = (parsed.personas ?? []).slice(0, 3).map((p) => ({
+        name: p.name ?? "",
+        archetype: p.archetype ?? "",
+        age: p.age ?? "",
+        job: (p as Persona).job ?? "",
+        traits: Array.isArray((p as Persona).traits) ? (p as Persona).traits.slice(0, 3) : [],
+        sentiment: Math.max(0, Math.min(100, p.sentiment ?? 50)),
+        quote: p.quote ?? "",
+      }));
+
       return {
         ok: true,
         data: {
           segments: sortedSegments,
-          personas: parsed.personas.slice(0, 3),
+          personas: cleanedPersonas,
           tones: parsed.tones.slice(0, 4),
           risk: parsed.risk,
           riskScore: Math.max(0, Math.min(100, parsed.riskScore)),
@@ -249,14 +270,16 @@ export type PersonaScoreResponse =
   | { ok: true; persona: Persona }
   | { ok: false; error: string };
 
-const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a custom audience persona built from three anchors — VALS (Values & Lifestyles), Pew political typology, and generational cohort — plus optional notes and the campaign copy, produce a realistic synthetic reaction.
+const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a custom audience persona built from three anchors — VALS (Values & Lifestyles), Pew political typology, and generational cohort — plus optional notes and the campaign copy, produce a realistic synthetic individual focus-group participant.
 
 You MUST call the return_persona tool with:
-- name: a broad category label like "Achiever Millennial Parents" or "Skeptical Gen X Strivers" — NEVER a person's first name.
+- name: a realistic first + last name (e.g. "Maya Patel", "Jordan Reeves") — NEVER a category label.
 - archetype: VALS type + one-line lifestyle descriptor.
 - age: generational range like "Millennials (29–44)".
+- job: a realistic occupation (e.g. "High-school teacher", "Product manager").
+- traits: an array of EXACTLY 3 short adjectives describing personality.
 - sentiment: integer 0–100 (their predicted positive sentiment toward the campaign copy).
-- quote: ~120 chars in their collective voice reacting to the copy.`;
+- quote: ~120 chars in their personal voice reacting to the copy.`;
 
 export const scorePersona = createServerFn({ method: "POST" })
   .inputValidator((data: { anchor: PersonaAnchor; copy: string }) => {
@@ -306,10 +329,12 @@ ${data.copy || "(no copy provided)"}`;
                   name: { type: "string" },
                   archetype: { type: "string" },
                   age: { type: "string" },
+                  job: { type: "string" },
+                  traits: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
                   sentiment: { type: "integer", minimum: 0, maximum: 100 },
                   quote: { type: "string" },
                 },
-                required: ["name","archetype","age","sentiment","quote"],
+                required: ["name","archetype","age","job","traits","sentiment","quote"],
                 additionalProperties: false,
               },
             },
@@ -325,8 +350,16 @@ ${data.copy || "(no copy provided)"}`;
       const json = await res.json();
       const argsStr = json?.choices?.[0]?.message?.tool_calls?.[0]?.function?.arguments;
       if (!argsStr) return { ok: false, error: "Unexpected response. Try again." };
-      const persona = JSON.parse(argsStr) as Persona;
-      persona.sentiment = Math.max(0, Math.min(100, persona.sentiment));
+      const raw = JSON.parse(argsStr) as Partial<Persona>;
+      const persona: Persona = {
+        name: raw.name ?? "",
+        archetype: raw.archetype ?? "",
+        age: raw.age ?? "",
+        job: raw.job ?? "",
+        traits: Array.isArray(raw.traits) ? raw.traits.slice(0, 3) : [],
+        sentiment: Math.max(0, Math.min(100, raw.sentiment ?? 50)),
+        quote: raw.quote ?? "",
+      };
       return { ok: true, persona };
     } catch (e) {
       console.error("scorePersona failed:", e);
