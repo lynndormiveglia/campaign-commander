@@ -537,7 +537,7 @@ export default function CampaignSimulator() {
                 fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".15em",
                 textTransform: "uppercase", textAlign: "center", marginBottom: 10,
               }}>
-                In your history
+                Your Campaign History
               </div>
               <CampaignCarousel
                 items={SAMPLE_CAMPAIGNS}
@@ -1190,7 +1190,7 @@ function CampaignFormCard({
             display: "inline-flex", alignItems: "center", justifyContent: "center",
           }}
         >
-          {importingPlan ? "…" : "⭳"}
+          {importingPlan ? "…" : "+"}
         </label>
         <input
           id={uploadInputId}
@@ -1439,7 +1439,10 @@ function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onR
             )}
           </div>
           <div style={{ fontSize: 11, color: C.muted, marginTop: 2 }}>
-            {persona.age}{persona.job ? ` · ${persona.job}` : ""}
+            {persona.age}
+            {persona.gender ? ` · ${persona.gender}` : ""}
+            {persona.religion ? ` · ${persona.religion}` : ""}
+            {persona.job ? ` · ${persona.job}` : ""}
           </div>
           <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 4, letterSpacing: ".02em" }}>{persona.archetype}</div>
         </div>
@@ -1742,7 +1745,7 @@ function FocusGroupScreen({
         concern: concerns[(i + group.traits.length) % concerns.length],
         channel: channels[(i + group.label.length) % channels.length],
         ageRange: seed % 3 === 0 ? "18–24" : seed % 3 === 1 ? "25–34" : "35–44",
-        gender: ["Mixed", "Female-leaning", "Male-leaning"][seed % 3],
+        gender: ["Female", "Male", "Non-binary"][seed % 3],
         location: locations[seed % locations.length],
         incomeLevel: incomes[seed % incomes.length],
         education: educations[seed % educations.length],
@@ -1777,6 +1780,8 @@ function FocusGroupScreen({
               name: `${fname} ${lname}`,
               archetype: `${g.label} participant`,
               age: sentiment >= 65 ? "Gen Z / Millennials" : sentiment >= 40 ? "Mixed adult audience" : "Mixed audience, skeptical segment",
+            gender: i % 3 === 0 ? "Female" : i % 3 === 1 ? "Male" : "Non-binary",
+            religion: i % 4 === 0 ? "Not specified" : i % 4 === 1 ? "Christian" : i % 4 === 2 ? "Muslim" : "Hindu",
               job: g.label,
               traits: g.traits.slice(0, 3),
               sentiment,
@@ -1863,6 +1868,8 @@ function FocusGroupScreen({
       lines.push(`### ${i + 1}. ${persona.name}${custom ? " (custom group)" : ""}`);
       lines.push(`- Archetype: ${persona.archetype}`);
       lines.push(`- Age: ${persona.age}`);
+      lines.push(`- Gender: ${persona.gender || "Not specified"}`);
+      lines.push(`- Religion: ${persona.religion || "Not specified"}`);
       lines.push(`- Group / Job: ${persona.job || "—"}`);
       lines.push(`- Traits: ${persona.traits.join(", ") || "—"}`);
       lines.push(`- Sentiment: ${persona.sentiment} (${sentimentLabel(persona.sentiment)})`);
@@ -2523,7 +2530,7 @@ function FocusGroupScreen({
                             }}>{initials}</div>
                             <span style={{ fontFamily: F.mono, fontSize: 11, fontWeight: 700, color: C.ink, letterSpacing: ".05em", textTransform: "uppercase" }}>{line.speaker}</span>
                             {persona && (
-                              <span style={{ fontFamily: F.mono, fontSize: 10, color: C.faint }}>· {persona.job || persona.age}</span>
+                              <span style={{ fontFamily: F.mono, fontSize: 10, color: C.faint }}>· {persona.job || persona.age} · {persona.gender || "Not specified"}</span>
                             )}
                           </div>
                           <div style={{
@@ -2571,7 +2578,7 @@ function FocusGroupScreen({
                               <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 2 }}>
                                 {custom
                                   ? (persona.job || persona.age?.replace(/\s*\(.+?\)/, "") || "Audience")
-                                  : `${persona.age?.replace(/\s*\(.+?\)/, "")} · ${persona.job || "—"}`}
+                                  : `${persona.age?.replace(/\s*\(.+?\)/, "")} · ${persona.gender || "Not specified"} · ${persona.job || "—"}`}
                               </div>
                             </div>
                           </div>
@@ -2856,7 +2863,10 @@ function FocusPersonaCard({ persona, custom, index, onRemove }: { persona: Perso
             {custom && <span style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, background: C.lineSoft, padding: "2px 6px", borderRadius: 4 }}>CUSTOM</span>}
           </div>
           <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>
-            {persona.age}{persona.job ? ` · ${persona.job}` : ""}
+            {persona.age}
+            {persona.gender ? ` · ${persona.gender}` : ""}
+            {persona.religion ? ` · ${persona.religion}` : ""}
+            {persona.job ? ` · ${persona.job}` : ""}
           </div>
         </div>
       </div>
@@ -3029,8 +3039,12 @@ function buildTranscript(personas: Persona[]): TranscriptLine[] {
     speaker: "Moderator",
     text: closingPrompts[(personas.length + (middle?.name.length ?? 0)) % closingPrompts.length],
   });
-  speakingOrder.forEach((p) => {
-    lines.push({ type: "persona", speaker: p.name, text: closingSuggestion(p) });
+  const usedClosingBySpeaker = new Map<string, Set<number>>();
+  speakingOrder.forEach((p, i) => {
+    const used = usedClosingBySpeaker.get(p.name) ?? new Set<number>();
+    const text = closingSuggestion(p, i, used);
+    usedClosingBySpeaker.set(p.name, used);
+    lines.push({ type: "persona", speaker: p.name, text });
   });
   return dedupeTranscriptLines(lines);
 }
@@ -3049,46 +3063,79 @@ function followUpMiddle(p: Persona, negative: Persona, positive: Persona): strin
   const pos = positive.name.split(" ")[0];
   return `I can see both sides - ${neg}'s trust issue is real, and ${pos} is right that the idea has potential. It needs tighter focus and cleaner evidence.`;
 }
-function closingSuggestion(p: Persona): string {
+function closingSuggestion(p: Persona, turnIdx = 0, used?: Set<number>): string {
   const optionsHigh = [
     "Keep the vibe, but anchor it with one concrete proof point and one clear CTA.",
     "This is close - just swap broad claims for specifics and I'd confidently share it.",
     "Don't over-polish it; keep the voice, add receipts, and this becomes compelling.",
+    "This could work fast if they open with one measurable claim and one direct action.",
+    "The core is strong; tighten the wording and make the proof impossible to miss.",
   ];
   const optionsMid = [
     "Narrow the message to one promise and back it with visible evidence.",
     "Right now it's split between hype and reassurance - pick one lead message and commit.",
     "Simplify the copy and make the value proposition explicit within the first line.",
+    "Trim this down to one clear value statement and remove the extra noise.",
+    "Lead with the buyer benefit first, then support it with one specific proof point.",
   ];
   const optionsLow = [
     "Cut the marketing filler and show concrete proof, numbers, or credible references.",
     "Rebuild this around transparency first - what is true, verifiable, and useful to the buyer?",
     "If they want trust, they need specifics: claims, constraints, and real examples.",
+    "This needs hard specifics, not vibe language - evidence has to come first.",
+    "Right now it sounds generic. Add sources, constraints, and concrete details.",
   ];
-  const seed = p.name.length % 3;
-  if (p.sentiment >= 60) return optionsHigh[seed];
-  if (p.sentiment >= 40) return optionsMid[seed];
-  return optionsLow[seed];
+  const pool = p.sentiment >= 60 ? optionsHigh : p.sentiment >= 40 ? optionsMid : optionsLow;
+  const start = (p.name.length + Math.round(p.sentiment) + turnIdx * 3) % pool.length;
+  for (let i = 0; i < pool.length; i += 1) {
+    const idx = (start + i) % pool.length;
+    if (!used?.has(idx)) {
+      used?.add(idx);
+      return pool[idx];
+    }
+  }
+  return pool[start];
 }
 
 function dedupeTranscriptLines(lines: TranscriptLine[]): TranscriptLine[] {
   const seen = new Set<string>();
+  const seenTrigrams = new Set<string>();
   const suffixes = [
     "From a shopper perspective.",
     "That's where credibility shifts.",
     "That would change my decision.",
     "Otherwise it still feels vague.",
+    "That's the practical blocker for me.",
+    "Without that, this still sounds recycled.",
   ];
   return lines.map((line, i) => {
     if (line.type === "moderator") return line;
     const normalized = line.text.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
-    if (!seen.has(normalized)) {
+    const tokens = normalized.split(/\s+/).filter(Boolean);
+    const trigrams = tokens.length >= 3
+      ? Array.from({ length: tokens.length - 2 }, (_, t) => `${tokens[t]} ${tokens[t + 1]} ${tokens[t + 2]}`)
+      : [normalized];
+    const hasNearDuplicate = trigrams.some((t) => seenTrigrams.has(t));
+    if (!seen.has(normalized) && !hasNearDuplicate) {
       seen.add(normalized);
+      trigrams.forEach((t) => seenTrigrams.add(t));
       return line;
     }
+    const prefix = [
+      "Another angle:",
+      "To make that concrete:",
+      "From the buyer side:",
+      "If I simplify it:",
+    ][i % 4];
     const suffix = suffixes[i % suffixes.length];
-    const revised = `${line.text} ${suffix}`;
-    seen.add(`${normalized}-${i}`);
+    const revised = `${prefix} ${line.text.replace(/\.$/, "")}. ${suffix}`;
+    const revisedNorm = revised.toLowerCase().replace(/[^a-z0-9\s]/g, "").trim();
+    const revisedTokens = revisedNorm.split(/\s+/).filter(Boolean);
+    const revisedTrigrams = revisedTokens.length >= 3
+      ? Array.from({ length: revisedTokens.length - 2 }, (_, t) => `${revisedTokens[t]} ${revisedTokens[t + 1]} ${revisedTokens[t + 2]}`)
+      : [revisedNorm];
+    seen.add(revisedNorm);
+    revisedTrigrams.forEach((t) => seenTrigrams.add(t));
     return { ...line, text: revised };
   });
 }

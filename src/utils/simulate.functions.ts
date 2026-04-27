@@ -25,6 +25,8 @@ export type Persona = {
   name: string;       // realistic first + last name (e.g. "Zoe Chen")
   archetype: string;  // plain-English lifestyle / mindset descriptor
   age: string;        // generational range (e.g. "Gen Z (18–27)")
+  gender: string;     // self-identified gender (plain text)
+  religion: string;   // optional faith background or "Not specified"
   job: string;        // realistic occupation
   traits: string[];   // 3 short adjectives
   sentiment: number;  // 0-100 positive
@@ -83,6 +85,13 @@ export type PlanExtractResponse =
 
 const CJK_CHAR_REGEX = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g;
 const sanitizeNoCjk = (value: string) => value.replace(CJK_CHAR_REGEX, "").replace(/\s{2,}/g, " ").trim();
+const normalizeGender = (value: unknown): "Male" | "Female" | "Non-binary" => {
+  const v = sanitizeNoCjk(String(value ?? "")).toLowerCase();
+  if (v.includes("non")) return "Non-binary";
+  if (v.includes("female") || v.includes("woman")) return "Female";
+  if (v.includes("male") || v.includes("man")) return "Male";
+  return "Non-binary";
+};
 const sanitizeNoCjkArray = (value: unknown, limit: number) =>
   Array.isArray(value)
     ? value
@@ -103,6 +112,8 @@ You MUST call the return_simulation tool. Rules:
   • name: a realistic first + last name (e.g. "Zoe Chen", "Marcus Webb", "Priya Nair", "Devon Park"). NEVER use category labels.
   • archetype: a plain-English one-line lifestyle/mindset descriptor (e.g. "Status-driven young professional", "Pragmatic budget shopper", "Trend-first value seeker"). Do NOT use any segmentation-framework terminology.
   • age: generational range like "Gen Z (18–27)" or "Millennials (29–44)".
+  • gender: MUST be exactly one of: "Male", "Female", "Non-binary".
+  • religion: short faith/cultural background if relevant (e.g. "Christian", "Muslim", "Hindu", "Not specified"). Keep respectful and neutral.
   • job: a realistic occupation (e.g. "Grad Student", "Retail Associate", "Creative Director").
   • traits: an array of EXACTLY 3 short adjectives describing personality (e.g. ["Practical","Vocal","Skeptical"]).
   • sentiment: 0–100 integer.
@@ -198,12 +209,14 @@ ${data.plan.copy}`;
                           name: { type: "string" },
                           archetype: { type: "string" },
                           age: { type: "string" },
+                          gender: { type: "string", enum: ["Male", "Female", "Non-binary"] },
+                          religion: { type: "string" },
                           job: { type: "string" },
                           traits: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
                           sentiment: { type: "integer", minimum: 0, maximum: 100 },
                           quote: { type: "string" },
                         },
-                        required: ["name", "archetype", "age", "job", "traits", "sentiment", "quote"],
+                        required: ["name", "archetype", "age", "gender", "religion", "job", "traits", "sentiment", "quote"],
                         additionalProperties: false,
                       },
                     },
@@ -281,6 +294,8 @@ ${data.plan.copy}`;
         name: sanitizeNoCjk(String(p.name ?? "")),
         archetype: sanitizeNoCjk(String(p.archetype ?? "")),
         age: sanitizeNoCjk(String(p.age ?? "")),
+        gender: normalizeGender((p as Persona).gender),
+        religion: sanitizeNoCjk(String((p as Persona).religion ?? "Not specified")),
         job: sanitizeNoCjk(String((p as Persona).job ?? "")),
         traits: sanitizeNoCjkArray((p as Persona).traits, 3),
         sentiment: Math.max(0, Math.min(100, p.sentiment ?? 50)),
@@ -338,6 +353,8 @@ You MUST call the return_persona tool with:
 - name: a broad audience-tag label, NOT a person's first/last name. Examples: "Eco-Critical Gen Z Shoppers", "Pragmatic Millennial Parents", "Status-Driven Suburban Strivers", "Skeptical Gen X Professionals". Build it from generation + lifestyle + mindset cues you infer from the description.
 - archetype: a plain-English one-line lifestyle/mindset descriptor for this group (e.g. "Trend-first value seekers", "Budget-driven seasonal shoppers"). No framework jargon.
 - age: generational range like "Millennials (29–44)" (inferred from description).
+- gender: MUST be exactly one of: "Male", "Female", "Non-binary". If unclear, use "Non-binary".
+- religion: "Not specified" unless the user explicitly provides relevant faith/cultural context.
 - job: a representative lifestyle/occupation phrase for this group (e.g. "Students & young creatives", "Corporate parents", "Service workers"). If it doesn't apply, return an empty string.
 - traits: an array of EXACTLY 3 short adjectives describing this group's collective personality (e.g. ["Vocal","Skeptical","Trend-driven"]).
 - sentiment: integer 0–100 (the group's predicted positive sentiment toward the campaign copy).
@@ -404,12 +421,14 @@ ${data.copy || "(no copy provided)"}`;
                   name: { type: "string" },
                   archetype: { type: "string" },
                   age: { type: "string" },
+                  gender: { type: "string", enum: ["Male", "Female", "Non-binary"] },
+                  religion: { type: "string" },
                   job: { type: "string" },
                   traits: { type: "array", minItems: 3, maxItems: 3, items: { type: "string" } },
                   sentiment: { type: "integer", minimum: 0, maximum: 100 },
                   quote: { type: "string" },
                 },
-                required: ["name","archetype","age","job","traits","sentiment","quote"],
+                required: ["name","archetype","age","gender","religion","job","traits","sentiment","quote"],
                 additionalProperties: false,
               },
             },
@@ -430,6 +449,8 @@ ${data.copy || "(no copy provided)"}`;
         name: sanitizeNoCjk(String(raw.name ?? "")),
         archetype: sanitizeNoCjk(String(raw.archetype ?? "")),
         age: sanitizeNoCjk(String(raw.age ?? "")),
+        gender: normalizeGender(raw.gender),
+        religion: sanitizeNoCjk(String(raw.religion ?? "Not specified")),
         job: sanitizeNoCjk(String(raw.job ?? "")),
         traits: sanitizeNoCjkArray(raw.traits, 3),
         sentiment: Math.max(0, Math.min(100, raw.sentiment ?? 50)),
