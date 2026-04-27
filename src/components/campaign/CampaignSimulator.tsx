@@ -46,35 +46,35 @@ const F = {
    =========================================================== */
 type SampleCampaign = { id: string; badge: string; title: string; emoji: string; gradient: string };
 const SAMPLE_CAMPAIGNS: SampleCampaign[] = [
-  { id: "sustain",  badge: "Sustainability",  title: '"Our Most Sustainable Product Yet."', emoji: "🌱", gradient: "linear-gradient(135deg,#F5F5F4,#E7E5E4)" },
-  { id: "wellness", badge: "Wellness",        title: '"Feel Good. Inside and Out."',         emoji: "🧴", gradient: "linear-gradient(135deg,#FAFAF9,#EDE9E3)" },
-  { id: "tech",     badge: "Product Launch",  title: '"Built for Builders."',                emoji: "⚙️", gradient: "linear-gradient(135deg,#F0F0EE,#E2DFDA)" },
-  { id: "food",     badge: "Food & Bev",      title: '"Taste the Difference."',              emoji: "🍃", gradient: "linear-gradient(135deg,#F5F5F4,#E5E3DE)" },
-  { id: "travel",   badge: "Travel",          title: '"Go Somewhere New."',                  emoji: "✈️", gradient: "linear-gradient(135deg,#F0F0EE,#DDD9D2)" },
-  { id: "fashion",  badge: "Fashion",         title: '"Wear It Better."',                    emoji: "👜", gradient: "linear-gradient(135deg,#FAFAF9,#E7E5E4)" },
+  { id: "shein",    badge: "SHEIN",           title: '"SHEIN Spring Drop is here."',         emoji: "🛍️", gradient: "linear-gradient(135deg,#F5F5F4,#E7E5E4)" },
+  { id: "creator",  badge: "Creator Collab",  title: '"Styled by your favorite creators."',  emoji: "📱", gradient: "linear-gradient(135deg,#FAFAF9,#EDE9E3)" },
+  { id: "basics",   badge: "Essentials",      title: '"Everyday looks under $20."',          emoji: "👕", gradient: "linear-gradient(135deg,#F0F0EE,#E2DFDA)" },
+  { id: "beauty",   badge: "SHEGLAM",         title: '"Finish your fit with SHEGLAM."',      emoji: "💄", gradient: "linear-gradient(135deg,#F5F5F4,#E5E3DE)" },
+  { id: "flash",    badge: "Flash Sale",      title: '"48-hour app-only flash deals."',      emoji: "⚡", gradient: "linear-gradient(135deg,#F0F0EE,#DDD9D2)" },
+  { id: "fashion",  badge: "Fashion",         title: '"Wear it now. Post it tonight."',      emoji: "✨", gradient: "linear-gradient(135deg,#FAFAF9,#E7E5E4)" },
 ];
 
 const FIELD_META: Record<FieldKey, { label: string; placeholder: string; multiline?: boolean; rows?: number }> = {
-  name:           { label: "Campaign Name",   placeholder: "e.g. Greener Fall Drop 2026" },
+  name:           { label: "Campaign Name",   placeholder: "e.g. SHEIN Spring Micro-Drop 2026" },
   timeline:       { label: "Timeline",        placeholder: "e.g. Mar 18 → Apr 30, 2026" },
-  keyMessage:     { label: "Key Message",     placeholder: "What's the single thing you want them to remember?", multiline: true, rows: 2 },
-  hashtag:        { label: "Hashtag",         placeholder: "#GreenerTogether" },
+  keyMessage:     { label: "Key Message",     placeholder: "What's the single message shoppers should remember?", multiline: true, rows: 2 },
+  hashtag:        { label: "Hashtag",         placeholder: "#SHEINStyleDrop" },
   slogan:         { label: "Slogan",          placeholder: "A tighter, punchier line." },
-  targetAudience: { label: "Target Audience", placeholder: "e.g. Eco-curious millennials & Gen Z, US/EU urban", multiline: true, rows: 2 },
-  location:       { label: "Location / Markets", placeholder: "e.g. United States, EU, urban Tier-1 cities" },
+  targetAudience: { label: "Target Audience", placeholder: "e.g. Trend-driven Gen Z and young millennial shoppers in US/UK", multiline: true, rows: 2 },
+  location:       { label: "Location / Markets", placeholder: "e.g. United States, UK, urban Tier-1 cities" },
   copy:           { label: "Campaign Copy",   placeholder: "The actual ad copy that audiences will see.", multiline: true, rows: 5 },
 };
 const FIELD_ORDER: FieldKey[] = ["name","timeline","keyMessage","hashtag","slogan","targetAudience","location","copy"];
 
 const DEFAULT_PLAN: CampaignPlan = {
-  name: "Greener Fall Drop 2026",
+  name: "SHEIN Spring Micro-Drop 2026",
   timeline: "Mar 18 → Apr 30, 2026",
-  keyMessage: "Our most sustainable product yet — proof inside.",
-  hashtag: "#GreenerTogether",
-  slogan: "Sustainable. Finally.",
-  targetAudience: "Eco-conscious Gen Z & millennial shoppers in US/EU urban areas.",
-  location: "United States & EU — urban Tier-1 cities",
-  copy: '"Our Most Sustainable Product Yet." — We\'re committed to a greener future. Shop our newest collection and join the movement.',
+  keyMessage: "Trend-right outfits that move from cart to closet fast.",
+  hashtag: "#SHEINStyleDrop",
+  slogan: "New fits. Fast.",
+  targetAudience: "Trend-driven Gen Z and young millennial shoppers in US/UK urban markets.",
+  location: "United States & UK — urban Tier-1 cities",
+  copy: "SHEIN's spring edit just dropped - statement looks, everyday basics, and creator picks at prices you can actually wear on repeat. Tap in before top styles sell out.",
 };
 
 /* ===========================================================
@@ -117,11 +117,11 @@ function riskBlurb(risk: SimulationResult["risk"]): string {
 
 type Comment = { id: number; user: string; text: string; type: "negative" | "neutral" | "positive" };
 const COMMENTS: Comment[] = [
-  { id: 1, user: "@_realconsumer · 2m ago", text: '"This feels like greenwashing. Zero specifics, just vibes. 🙄"', type: "negative" },
-  { id: 2, user: "@sustainableskeptic · 5m ago", text: '"Who is this even for? The vagueness is insulting."', type: "negative" },
-  { id: 3, user: "@climate_watchdog · 11m ago", text: '"Another brand pretending to care without showing any proof."', type: "negative" },
-  { id: 4, user: "@shoppingmaybe · 18m ago", text: '"What does \'most sustainable\' even mean? Compared to what?"', type: "neutral" },
-  { id: 5, user: "@earthfirst_amy · 26m ago", text: '"Finally a brand putting sustainability front and center — adding to cart now! 🌱"', type: "positive" },
+  { id: 1, user: "@fitchecklane · 2m ago", text: '"SHEIN post again but no sizing proof on real bodies? Not buying the hype."', type: "negative" },
+  { id: 2, user: "@closetcritic · 5m ago", text: '"This sounds like every fast-fashion ad ever. What is actually different here?"', type: "negative" },
+  { id: 3, user: "@stylewatchhub · 11m ago", text: '"If quality is improved, say it clearly. Right now this reads like generic promo fluff."', type: "negative" },
+  { id: 4, user: "@shoppingmaybe · 18m ago", text: '"Cute pieces, but I need fit + fabric details before I check out."', type: "neutral" },
+  { id: 5, user: "@outfitdiaryamy · 26m ago", text: '"Okay these picks are actually fire for the price. Saved three looks already. ✨"', type: "positive" },
 ];
 
 /* ===========================================================
@@ -712,7 +712,7 @@ export default function CampaignSimulator() {
                         value={draftDescription}
                         onChange={(e) => setDraftDescription(e.target.value)}
                         rows={5}
-                        placeholder="e.g. Mid-30s urban renters, sustainability-minded but price-sensitive, watch a lot of YouTube, distrust greenwashing claims."
+                        placeholder="e.g. Gen Z fashion deal hunters, heavy TikTok users, trend-first but skeptical about quality claims."
                         style={inputStyle(false)}
                       />
                       <button
@@ -1322,6 +1322,9 @@ function FocusGroupScreen({
   const [groupNameDraft, setGroupNameDraft] = useState("");
   const [groupSummaryDraft, setGroupSummaryDraft] = useState("");
   const [groupTraitsDraft, setGroupTraitsDraft] = useState("");
+  const [exportPreviewOpen, setExportPreviewOpen] = useState(false);
+  const [exportMarkdown, setExportMarkdown] = useState("");
+  const exportPreviewFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [recentlyDeletedGroup, setRecentlyDeletedGroup] = useState<{ group: PersonaGroup; index: number } | null>(null);
   const groupUndoTimeoutRef = useRef<number | null>(null);
 
@@ -1535,7 +1538,7 @@ function FocusGroupScreen({
     const incomes = ["$30k–$60k", "$60k–$90k", "$90k–$140k", "$140k+"];
     const educations = ["High school", "Undergrad", "Graduate", "Mixed"];
     const occupations = ["Students & creators", "Young professionals", "Parents & managers", "Service & gig workers"];
-    const locations = ["United States", "US + Canada", "US + EU", "Urban Tier-1 cities"];
+    const locations = ["United States", "US + UK", "US + Canada", "Urban Tier-1 cities"];
     const interestsPool = ["Fashion", "Social Media", "Sustainability", "Budget shopping", "Pop culture", "Tech", "Wellness"];
     const valuesPool = ["Authenticity", "Convenience", "Value", "Trust", "Status", "Practicality", "Sustainability"];
     const personalityPool = ["Skeptical", "Trend-driven", "Practical", "Vocal", "Analytical", "Price-sensitive"];
@@ -1608,7 +1611,6 @@ function FocusGroupScreen({
     const lines: string[] = [];
     const now = new Date();
     const pad = (n: number) => String(n).padStart(2, "0");
-    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
 
     lines.push("# Focus Group Analysis");
     lines.push("");
@@ -1675,7 +1677,16 @@ function FocusGroupScreen({
     }
 
     const content = lines.join("\n");
-    const blob = new Blob([content], { type: "text/markdown;charset=utf-8" });
+    setExportMarkdown(content);
+    setExportPreviewOpen(true);
+  };
+
+  const downloadFocusGroupMarkdown = () => {
+    if (!exportMarkdown) return;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const stamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
+    const blob = new Blob([exportMarkdown], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -1685,6 +1696,34 @@ function FocusGroupScreen({
     a.remove();
     URL.revokeObjectURL(url);
   };
+
+  const exportPreviewHtml = useMemo(() => {
+    const escaped = exportMarkdown
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Focus Group Report Preview</title>
+  <style>
+    body{margin:0;padding:32px;font-family:Inter,Arial,sans-serif;color:#111;background:#fff}
+    .paper{max-width:860px;margin:0 auto}
+    h1{font-size:28px;margin:0 0 16px}
+    p.meta{color:#666;font-size:12px;margin:0 0 18px}
+    pre{white-space:pre-wrap;word-break:break-word;line-height:1.55;font-size:13px;background:#fafafa;border:1px solid #e5e5e5;border-radius:10px;padding:16px}
+  </style>
+</head>
+<body>
+  <div class="paper">
+    <h1>Focus Group PDF Preview</h1>
+    <p class="meta">Use browser Print → Save as PDF to export this report as PDF.</p>
+    <pre>${escaped}</pre>
+  </div>
+</body>
+</html>`;
+  }, [exportMarkdown]);
 
   return (
     <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
@@ -2274,6 +2313,55 @@ function FocusGroupScreen({
               </div>
             )}
               </>
+            )}
+
+            {exportPreviewOpen && (
+              <div
+                onClick={() => setExportPreviewOpen(false)}
+                style={{
+                  position: "fixed", inset: 0, zIndex: 260,
+                  background: "rgba(10,10,10,.5)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  padding: 20,
+                }}
+              >
+                <div
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    width: "min(980px, 100%)", height: "min(90vh, 820px)",
+                    background: C.surface, border: `1px solid ${C.line}`,
+                    borderRadius: 14, display: "grid", gridTemplateRows: "auto 1fr",
+                    boxShadow: "0 20px 60px rgba(0,0,0,.25)",
+                  }}
+                >
+                  <div style={{ padding: 14, borderBottom: `1px solid ${C.line}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+                    <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>
+                      PDF Report Preview
+                    </div>
+                    <div style={{ display: "inline-flex", gap: 8 }}>
+                      <button
+                        onClick={downloadFocusGroupMarkdown}
+                        style={{ background: C.surface, border: `1px solid ${C.line}`, color: C.ink, borderRadius: 8, padding: "8px 10px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                      >
+                        Download .md
+                      </button>
+                      <button
+                        onClick={() => exportPreviewFrameRef.current?.contentWindow?.print()}
+                        style={{ ...progressBtnStyle(), padding: "8px 12px", fontSize: 12 }}
+                      >
+                        Print / Save PDF
+                      </button>
+                      <button onClick={() => setExportPreviewOpen(false)} style={{ background: "transparent", border: "none", color: C.faint, cursor: "pointer", fontSize: 16 }}>✕</button>
+                    </div>
+                  </div>
+                  <iframe
+                    ref={exportPreviewFrameRef}
+                    title="Focus Group PDF Preview"
+                    srcDoc={exportPreviewHtml}
+                    style={{ border: "none", width: "100%", height: "100%", borderRadius: "0 0 14px 14px", background: "#fff" }}
+                  />
+                </div>
+              </div>
             )}
           </>
         )}

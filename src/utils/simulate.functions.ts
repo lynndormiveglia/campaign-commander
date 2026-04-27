@@ -97,9 +97,9 @@ You MUST call the return_simulation tool. Rules:
 - segments: EXACTLY three audience CATEGORIES (NOT individual people) most relevant to the target audience. Each name is a broad consumer category phrased like "Gen Z Fashion Lovers", "Eco-Curious Millennial Parents", "Skeptical Gen X Professionals" — combine generation, lifestyle and mindset into a plain-English label. sentimentPct is 0–100 integer. Vague/defensive copy scores low (10–40); specific, transparent, evidence-backed scores high (60–90). topReaction is an in-character quote (~140 chars). fix is one rewrite suggestion (~140 chars).
 - personas: EXACTLY 3 realistic individual focus-group participants who together represent the target audience. Each persona should feel like a believable real person:
   • name: a realistic first + last name (e.g. "Zoe Chen", "Marcus Webb", "Priya Nair", "Devon Park"). NEVER use category labels.
-  • archetype: a plain-English one-line lifestyle/mindset descriptor (e.g. "Status-driven young professional", "Pragmatic budget shopper", "Principled sustainability advocate"). Do NOT use any segmentation-framework terminology.
+  • archetype: a plain-English one-line lifestyle/mindset descriptor (e.g. "Status-driven young professional", "Pragmatic budget shopper", "Trend-first value seeker"). Do NOT use any segmentation-framework terminology.
   • age: generational range like "Gen Z (18–27)" or "Millennials (29–44)".
-  • job: a realistic occupation (e.g. "Grad Student", "Sustainability Consultant", "Creative Director").
+  • job: a realistic occupation (e.g. "Grad Student", "Retail Associate", "Creative Director").
   • traits: an array of EXACTLY 3 short adjectives describing personality (e.g. ["Practical","Vocal","Skeptical"]).
   • sentiment: 0–100 integer.
   • quote: ~120 chars in their personal voice reacting to the campaign copy. Make the three personas span clearly different sentiment levels (one supportive, one critical, one in-between) so the panel feels like a real focus group.
@@ -332,7 +332,7 @@ Language constraint: output ONLY ASCII/Latin characters. Never output Chinese (H
 
 You MUST call the return_persona tool with:
 - name: a broad audience-tag label, NOT a person's first/last name. Examples: "Eco-Critical Gen Z Shoppers", "Pragmatic Millennial Parents", "Status-Driven Suburban Strivers", "Skeptical Gen X Professionals". Build it from generation + lifestyle + mindset cues you infer from the description.
-- archetype: a plain-English one-line lifestyle/mindset descriptor for this group (e.g. "Principled sustainability advocates", "Budget-driven seasonal shoppers"). No framework jargon.
+- archetype: a plain-English one-line lifestyle/mindset descriptor for this group (e.g. "Trend-first value seekers", "Budget-driven seasonal shoppers"). No framework jargon.
 - age: generational range like "Millennials (29–44)" (inferred from description).
 - job: a representative lifestyle/occupation phrase for this group (e.g. "Students & young creatives", "Corporate parents", "Service workers"). If it doesn't apply, return an empty string.
 - traits: an array of EXACTLY 3 short adjectives describing this group's collective personality (e.g. ["Vocal","Skeptical","Trend-driven"]).
