@@ -922,7 +922,7 @@ export default function CampaignSimulator() {
                           padding: "9px 16px", borderRadius: 8,
                           fontFamily: F.body, fontSize: 12, fontWeight: 600,
                           cursor: simulating ? "default" : "pointer",
-                        }}>{simulating ? "Re-running…" : "Re-simulate"}</button>
+                        }}>{simulating ? (<><span className="aiSpin" style={{ width: 10, height: 10 }} /> Re-running AI…</>) : "Re-simulate"}</button>
                       </div>
 
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -1108,7 +1108,7 @@ export default function CampaignSimulator() {
                               display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
                             }}>
                             {scoringPersona ? (
-                              <>Analyzing <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+                              <><span className="aiSpin" /> Analyzing with AI…</>
                             ) : "+ Add persona"}
                           </button>
                           {personaError && (
@@ -1228,7 +1228,7 @@ function CampaignFormCard({
             display: "inline-flex", alignItems: "center", justifyContent: "center",
           }}
         >
-          {importingPlan ? "…" : "+"}
+          {importingPlan ? <span className="aiSpin" style={{ borderColor: C.ink, borderTopColor: "transparent" }} /> : "+"}
         </label>
         <input
           id={uploadInputId}
@@ -1339,7 +1339,7 @@ function CampaignFormCard({
           display: "inline-flex", alignItems: "center", gap: 8,
         }}>
           {simulating ? (
-            <>Running <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+            <><span className="aiSpin" /> Running AI simulation…</>
           ) : ctaLabel}
         </button>
       </div>
@@ -2249,7 +2249,7 @@ function FocusGroupScreen({
                     }}
                   >
                     {generatingFocusGroup
-                      ? <>Generating <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+                      ? <><span className="aiSpin" /> Generating focus group…</>
                       : "Run Focus Group Analysis →"}
                   </button>
                 </div>
@@ -2478,7 +2478,7 @@ function FocusGroupScreen({
                     }}
                   >
                     {generatingFocusGroup
-                      ? <>Generating In-Depth <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+                      ? <><span className="aiSpin" /> Generating in-depth…</>
                       : "🔁 In-Depth Discussion"}
                   </button>
                 )}
