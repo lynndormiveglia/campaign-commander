@@ -77,7 +77,19 @@ export type SimulationResponse =
   | { ok: true; data: SimulationResult }
   | { ok: false; error: string };
 
+const CJK_CHAR_REGEX = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF]/g;
+const sanitizeNoCjk = (value: string) => value.replace(CJK_CHAR_REGEX, "").replace(/\s{2,}/g, " ").trim();
+const sanitizeNoCjkArray = (value: unknown, limit: number) =>
+  Array.isArray(value)
+    ? value
+        .slice(0, limit)
+        .map((item) => sanitizeNoCjk(String(item ?? "")))
+        .filter(Boolean)
+    : [];
+
 const SYSTEM_PROMPT = `You are a senior brand strategist running a synthetic focus group for a marketing campaign. You may rely on standard consumer-segmentation thinking internally, but NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers", "Experiencers", "Believers", "Makers", "Survivors") in any user-facing output field. Use plain English consumers would recognize.
+
+Language constraint: output ONLY ASCII/Latin characters. Never output Chinese (Hanzi), Japanese, Korean, or any non-Latin script in any field.
 
 You will be given a structured campaign plan (name, timeline, key message, hashtag, slogan, target audience, location/markets, and the actual ad copy). Use the location/markets to ground regional and cultural assumptions. Critique it as if you had just shown it to three audience segments and aggregated their reactions. Be specific to the actual words — never generic feedback.
 
@@ -253,26 +265,31 @@ ${data.plan.copy}`;
       try { parsed = JSON.parse(argsStr); }
       catch { return { ok: false, error: "The simulator returned malformed data. Try again." }; }
 
-      const sortedSegments = (parsed.segments ?? []).slice(0, 3);
+      const sortedSegments = (parsed.segments ?? []).slice(0, 3).map((s) => ({
+        name: sanitizeNoCjk(String(s.name ?? "")),
+        sentimentPct: Math.max(0, Math.min(100, Number(s.sentimentPct ?? 50))),
+        topReaction: sanitizeNoCjk(String(s.topReaction ?? "")),
+        fix: sanitizeNoCjk(String(s.fix ?? "")),
+      }));
       if (sortedSegments.length !== 3) return { ok: false, error: "Incomplete segments. Try again." };
 
       const cleanedPersonas: Persona[] = (parsed.personas ?? []).slice(0, 3).map((p) => ({
-        name: p.name ?? "",
-        archetype: p.archetype ?? "",
-        age: p.age ?? "",
-        job: (p as Persona).job ?? "",
-        traits: Array.isArray((p as Persona).traits) ? (p as Persona).traits.slice(0, 3) : [],
+        name: sanitizeNoCjk(String(p.name ?? "")),
+        archetype: sanitizeNoCjk(String(p.archetype ?? "")),
+        age: sanitizeNoCjk(String(p.age ?? "")),
+        job: sanitizeNoCjk(String((p as Persona).job ?? "")),
+        traits: sanitizeNoCjkArray((p as Persona).traits, 3),
         sentiment: Math.max(0, Math.min(100, p.sentiment ?? 50)),
-        quote: p.quote ?? "",
+        quote: sanitizeNoCjk(String(p.quote ?? "")),
       }));
 
       const rawInsights = (parsed as { insights?: Partial<SimulationInsights> }).insights ?? {};
       const cleanedInsights: SimulationInsights = {
-        whatWorks:            Array.isArray(rawInsights.whatWorks)       ? rawInsights.whatWorks.slice(0, 4)       : [],
-        whatDoesnt:           Array.isArray(rawInsights.whatDoesnt)      ? rawInsights.whatDoesnt.slice(0, 4)      : [],
-        opportunities:        Array.isArray(rawInsights.opportunities)   ? rawInsights.opportunities.slice(0, 3)   : [],
-        suggestedTweaks:      Array.isArray(rawInsights.suggestedTweaks) ? rawInsights.suggestedTweaks.slice(0, 4) : [],
-        predictedPerformance: typeof rawInsights.predictedPerformance === "string" ? rawInsights.predictedPerformance : "",
+        whatWorks:            sanitizeNoCjkArray(rawInsights.whatWorks, 4),
+        whatDoesnt:           sanitizeNoCjkArray(rawInsights.whatDoesnt, 4),
+        opportunities:        sanitizeNoCjkArray(rawInsights.opportunities, 3),
+        suggestedTweaks:      sanitizeNoCjkArray(rawInsights.suggestedTweaks, 4),
+        predictedPerformance: sanitizeNoCjk(String(rawInsights.predictedPerformance ?? "")),
       };
 
       return {
@@ -280,12 +297,17 @@ ${data.plan.copy}`;
         data: {
           segments: sortedSegments,
           personas: cleanedPersonas,
-          tones: parsed.tones.slice(0, 4),
+          tones: sanitizeNoCjkArray(parsed.tones, 4),
           risk: parsed.risk,
           riskScore: Math.max(0, Math.min(100, parsed.riskScore)),
-          riskRationale: parsed.riskRationale,
-          flags: parsed.flags ?? [],
-          improvedCopy: parsed.improvedCopy ?? "",
+          riskRationale: sanitizeNoCjk(String(parsed.riskRationale ?? "")),
+          flags: (parsed.flags ?? []).map((f) => ({
+            ...f,
+            issue: sanitizeNoCjk(String(f.issue ?? "")),
+            suggestion: sanitizeNoCjk(String(f.suggestion ?? "")),
+            fix: sanitizeNoCjk(String(f.fix ?? "")),
+          })),
+          improvedCopy: sanitizeNoCjk(String(parsed.improvedCopy ?? "")),
           insights: cleanedInsights,
         },
       };
@@ -305,6 +327,8 @@ export type PersonaScoreResponse =
 const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a free-form description of a target audience and the campaign copy, produce a synthetic AUDIENCE TAG (a broad consumer group, NOT a single named individual) that captures who the marketer described.
 
 NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers") in any output field — use plain English a marketer would recognize.
+
+Language constraint: output ONLY ASCII/Latin characters. Never output Chinese (Hanzi), Japanese, Korean, or any non-Latin script in any field.
 
 You MUST call the return_persona tool with:
 - name: a broad audience-tag label, NOT a person's first/last name. Examples: "Eco-Critical Gen Z Shoppers", "Pragmatic Millennial Parents", "Status-Driven Suburban Strivers", "Skeptical Gen X Professionals". Build it from generation + lifestyle + mindset cues you infer from the description.
@@ -379,13 +403,13 @@ ${data.copy || "(no copy provided)"}`;
       if (!argsStr) return { ok: false, error: "Unexpected response. Try again." };
       const raw = JSON.parse(argsStr) as Partial<Persona>;
       const persona: Persona = {
-        name: raw.name ?? "",
-        archetype: raw.archetype ?? "",
-        age: raw.age ?? "",
-        job: raw.job ?? "",
-        traits: Array.isArray(raw.traits) ? raw.traits.slice(0, 3) : [],
+        name: sanitizeNoCjk(String(raw.name ?? "")),
+        archetype: sanitizeNoCjk(String(raw.archetype ?? "")),
+        age: sanitizeNoCjk(String(raw.age ?? "")),
+        job: sanitizeNoCjk(String(raw.job ?? "")),
+        traits: sanitizeNoCjkArray(raw.traits, 3),
         sentiment: Math.max(0, Math.min(100, raw.sentiment ?? 50)),
-        quote: raw.quote ?? "",
+        quote: sanitizeNoCjk(String(raw.quote ?? "")),
       };
       return { ok: true, persona };
     } catch (e) {

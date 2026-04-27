@@ -730,6 +730,7 @@ export default function CampaignSimulator() {
            ===================================================== */}
         {screen === 4 && (
           <FocusGroupScreen
+            plan={plan}
             simResult={simResult}
             customPersonas={customPersonas}
             onRemoveCustom={removeCustomPersona}
@@ -931,6 +932,41 @@ export default function CampaignSimulator() {
                           </div>
                         </div>
                       )}
+                      <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
+                        <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 4 }}>
+                          Add Custom Persona
+                        </div>
+                        <p style={{ fontSize: 11, color: C.faint, lineHeight: 1.5, marginBottom: 12 }}>
+                          Add another audience tag directly from results — it will also appear in Focus Group setup.
+                        </p>
+                        <div style={{ display: "grid", gap: 10 }}>
+                          <textarea
+                            value={draftDescription}
+                            onChange={(e) => setDraftDescription(e.target.value)}
+                            rows={3}
+                            placeholder="e.g. Young suburban families, value-first shoppers, highly skeptical of broad sustainability claims."
+                            style={inputStyle(false)}
+                          />
+                          <button
+                            onClick={addCustomPersona}
+                            disabled={!draftReady || scoringPersona}
+                            style={{
+                              background: !draftReady || scoringPersona ? C.lineSoft : C.ink,
+                              color: !draftReady || scoringPersona ? C.faint : C.accentInk,
+                              border: "none", padding: "10px 14px", borderRadius: 8,
+                              fontFamily: F.body, fontSize: 13, fontWeight: 600,
+                              cursor: !draftReady || scoringPersona ? "default" : "pointer",
+                              display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8,
+                            }}>
+                            {scoringPersona ? (
+                              <>Analyzing <span className="dot1">●</span><span className="dot2">●</span><span className="dot3">●</span></>
+                            ) : "+ Add persona"}
+                          </button>
+                          {personaError && (
+                            <div style={{ fontFamily: F.mono, fontSize: 11, color: C.bad }}>⚠ {personaError}</div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </>
@@ -1233,8 +1269,9 @@ function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onR
 }
 
 function FocusGroupScreen({
-  simResult, customPersonas, onRemoveCustom, onGoSimulate, onGoResults,
+  plan, simResult, customPersonas, onRemoveCustom, onGoSimulate, onGoResults,
 }: {
+  plan: CampaignPlan;
   simResult: SimulationResult | null;
   customPersonas: Persona[];
   onRemoveCustom: (idx: number) => void;
@@ -1257,7 +1294,8 @@ function FocusGroupScreen({
   const [tab, setTab] = useState<"conclusion" | "personas" | "transcript">("conclusion");
   const [feedbackDepth, setFeedbackDepth] = useState<"quick" | "in-depth">("in-depth");
   const [audienceDiversity, setAudienceDiversity] = useState<"low" | "medium" | "high">("high");
-  const [critiqueRigour, setCritiqueRigour] = useState<"light" | "balanced" | "harsh">("balanced");
+  const [critiqueRigour, setCritiqueRigour] = useState(6);
+  const [infoOpen, setInfoOpen] = useState<null | "diversity" | "rigour" | "depth">(null);
   const [groups, setGroups] = useState<PersonaGroup[]>([]);
   const [generatedPanel, setGeneratedPanel] = useState<GeneratedEntry[]>([]);
 
@@ -1292,6 +1330,15 @@ function FocusGroupScreen({
     return [...fromSegments, ...fromCustom];
   }, [simResult, customPersonas]);
 
+  const applyParticipantCap = (list: PersonaGroup[]) => {
+    let remaining = MAX_FOCUS_GROUP_PARTICIPANTS;
+    return list.map((g) => {
+      const next = Math.max(0, Math.min(g.count, remaining));
+      remaining -= next;
+      return { ...g, count: next };
+    });
+  };
+
   useEffect(() => {
     if (!simResult) {
       setGroups([]);
@@ -1300,10 +1347,11 @@ function FocusGroupScreen({
     }
     setGroups((prev) => {
       const prevMap = new Map(prev.map((g) => [g.id, g]));
-      return baseGroups.map((g) => {
+      const merged = baseGroups.map((g) => {
         const p = prevMap.get(g.id);
         return p ? { ...g, count: p.count } : g;
       });
+      return applyParticipantCap(merged);
     });
   }, [baseGroups, simResult]);
 
@@ -1328,10 +1376,12 @@ function FocusGroupScreen({
       ? avgSentiment(simResult.personas, customPersonas)
       : 0;
   const totalParticipants = groups.reduce((sum, g) => sum + g.count, 0);
+  const MAX_FOCUS_GROUP_PARTICIPANTS = 8;
+  const canAddMoreParticipants = totalParticipants < MAX_FOCUS_GROUP_PARTICIPANTS;
   const activeGroup = activeGroupId ? groups.find((g) => g.id === activeGroupId) ?? null : null;
 
   const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n));
-  const harshnessDelta = critiqueRigour === "harsh" ? -14 : critiqueRigour === "light" ? 8 : 0;
+  const harshnessDelta = (5 - critiqueRigour) * 2;
   const diversityRange = audienceDiversity === "high" ? 18 : audienceDiversity === "medium" ? 10 : 5;
   const firstNames = ["Avery", "Jordan", "Maya", "Noah", "Zoe", "Liam", "Priya", "Marcus", "Elena", "Owen", "Devon", "Riley"];
   const lastNames = ["Chen", "Patel", "Webb", "Park", "Reyes", "Nair", "Hughes", "Kim", "Lopez", "Grant", "Shaw", "Bennett"];
@@ -1344,10 +1394,18 @@ function FocusGroupScreen({
   ];
 
   const updateGroupCount = (id: string, next: number) => {
-    setGroups((prev) => prev.map((g) => (g.id === id ? { ...g, count: Math.max(0, Math.min(6, next)) } : g)));
+    setGroups((prev) => {
+      const target = prev.find((g) => g.id === id);
+      if (!target) return prev;
+      const others = prev.reduce((s, g) => (g.id === id ? s : s + g.count), 0);
+      const maxAllowedForGroup = Math.max(0, Math.min(6, MAX_FOCUS_GROUP_PARTICIPANTS - others));
+      const clamped = Math.max(0, Math.min(maxAllowedForGroup, next));
+      return prev.map((g) => (g.id === id ? { ...g, count: clamped } : g));
+    });
   };
 
   const addCustomGroup = () => {
+    if (!canAddMoreParticipants) return;
     const name = groupNameDraft.trim();
     const summary = groupSummaryDraft.trim();
     if (!name) return;
@@ -1362,7 +1420,7 @@ function FocusGroupScreen({
       summary: summary || "Custom audience group added by user.",
       traits: parsedTraits.length ? parsedTraits : ["Niche", "Specific", "Opinionated"],
       baseSentiment: 50,
-      count: 1,
+      count: Math.min(1, MAX_FOCUS_GROUP_PARTICIPANTS - totalParticipants),
       custom: true,
       sourceCustomIdx: -1,
     }]);
@@ -1381,7 +1439,24 @@ function FocusGroupScreen({
 
   const buildGroupParticipantPreview = (group: PersonaGroup) => {
     const total = Math.max(1, group.count);
-    const rows: Array<{ name: string; sentiment: number; concern: string; channel: string }> = [];
+    const rows: Array<{
+      name: string;
+      sentiment: number;
+      concern: string;
+      channel: string;
+      ageRange: string;
+      gender: string;
+      location: string;
+      incomeLevel: string;
+      education: string;
+      occupation: string;
+      valsStyle: string;
+      brandAffinities: string;
+      interests: string[];
+      values: string[];
+      personalityTraits: string[];
+      mediaHabits: string[];
+    }> = [];
     const concerns = [
       "Needs clearer proof points",
       "Wants practical value, not broad claims",
@@ -1390,15 +1465,42 @@ function FocusGroupScreen({
       "Quick to call out inauthentic messaging",
     ];
     const channels = ["TikTok", "Instagram", "YouTube", "Reddit", "X / Twitter"];
+    const valsProfiles = ["Achiever-like", "Experiencer-like", "Thinker-like", "Striver-like", "Believer-like"];
+    const incomes = ["$30k–$60k", "$60k–$90k", "$90k–$140k", "$140k+"];
+    const educations = ["High school", "Undergrad", "Graduate", "Mixed"];
+    const occupations = ["Students & creators", "Young professionals", "Parents & managers", "Service & gig workers"];
+    const locations = ["United States", "US + Canada", "US + EU", "Urban Tier-1 cities"];
+    const interestsPool = ["Fashion", "Social Media", "Sustainability", "Budget shopping", "Pop culture", "Tech", "Wellness"];
+    const valuesPool = ["Authenticity", "Convenience", "Value", "Trust", "Status", "Practicality", "Sustainability"];
+    const personalityPool = ["Skeptical", "Trend-driven", "Practical", "Vocal", "Analytical", "Price-sensitive"];
+    const mediaPool = ["TikTok", "Instagram", "YouTube", "Reddit", "X / Twitter", "Podcasts"];
+    const affinitiesPool = ["ZARA", "H&M", "Depop", "Vinted", "Amazon", "Target", "Patagonia", "Uniqlo"];
+
+    const pick = (pool: string[], start: number, count: number) =>
+      Array.from({ length: count }, (_, i) => pool[(start + i) % pool.length]);
+
     for (let i = 0; i < total; i += 1) {
       const variance = ((i + 1) * 7) % (diversityRange * 2 + 1) - diversityRange;
       const sentiment = clamp(Math.round(group.baseSentiment + harshnessDelta + variance));
       const name = `${firstNames[(i + group.label.length) % firstNames.length]} ${lastNames[(i + group.label.length * 2) % lastNames.length]}`;
+      const seed = i + group.label.length;
       rows.push({
         name,
         sentiment,
         concern: concerns[(i + group.traits.length) % concerns.length],
         channel: channels[(i + group.label.length) % channels.length],
+        ageRange: seed % 3 === 0 ? "18–24" : seed % 3 === 1 ? "25–34" : "35–44",
+        gender: ["Mixed", "Female-leaning", "Male-leaning"][seed % 3],
+        location: locations[seed % locations.length],
+        incomeLevel: incomes[seed % incomes.length],
+        education: educations[seed % educations.length],
+        occupation: occupations[seed % occupations.length],
+        valsStyle: valsProfiles[seed % valsProfiles.length],
+        brandAffinities: pick(affinitiesPool, seed, 4).join(", "),
+        interests: pick(interestsPool, seed, 4),
+        values: pick(valuesPool, seed + 1, 3),
+        personalityTraits: pick(personalityPool, seed + 2, 3),
+        mediaHabits: pick(mediaPool, seed + 3, 4),
       });
     }
     return rows;
@@ -1449,7 +1551,7 @@ function FocusGroupScreen({
     lines.push("## Configuration");
     lines.push(`- Feedback depth: ${feedbackDepth === "in-depth" ? "In-depth discussion" : "Quick reactions"}`);
     lines.push(`- Audience diversity: ${audienceDiversity}`);
-    lines.push(`- Critique rigour: ${critiqueRigour}`);
+    lines.push(`- Critique rigour: ${critiqueRigour}/10`);
     lines.push("");
 
     lines.push("## Persona Groups");
@@ -1541,16 +1643,28 @@ function FocusGroupScreen({
                       Persona Group Setup
                     </div>
                     <div style={{ fontFamily: F.display, fontSize: 18, fontWeight: 700, letterSpacing: "-0.01em", color: C.ink }}>
-                      {totalParticipants} participants total
+                      {totalParticipants} / {MAX_FOCUS_GROUP_PARTICIPANTS} participants
                     </div>
                   </div>
+                  {!canAddMoreParticipants && (
+                    <div style={{
+                      marginBottom: 12,
+                      fontFamily: F.mono, fontSize: 10, color: C.warn,
+                      letterSpacing: ".06em", textTransform: "uppercase",
+                    }}>
+                      Participant cap reached (max {MAX_FOCUS_GROUP_PARTICIPANTS})
+                    </div>
+                  )}
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
                     {groups.map((g) => (
                       <div
                         key={g.id}
                         onClick={() => setActiveGroupId(g.id)}
                         style={{
-                          background: C.bg, border: `1px solid ${C.line}`, borderRadius: 12, padding: 14,
+                          background: g.custom ? "#FAFAFF" : C.bg,
+                          border: `1px solid ${g.custom ? "#C7D2FE" : C.line}`,
+                          borderLeft: `4px solid ${g.custom ? "#818CF8" : "#94A3B8"}`,
+                          borderRadius: 12, padding: 14,
                           cursor: "pointer",
                         }}
                       >
@@ -1566,7 +1680,15 @@ function FocusGroupScreen({
                           <div style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                             <button onClick={(e) => { e.stopPropagation(); updateGroupCount(g.id, g.count - 1); }} style={{ width: 22, height: 22, borderRadius: 6, border: `1px solid ${C.line}`, background: "#fff", cursor: "pointer" }}>−</button>
                             <span style={{ minWidth: 16, textAlign: "center", fontFamily: F.mono, fontSize: 12, fontWeight: 700 }}>{g.count}</span>
-                            <button onClick={(e) => { e.stopPropagation(); updateGroupCount(g.id, g.count + 1); }} style={{ width: 22, height: 22, borderRadius: 6, border: `1px solid ${C.line}`, background: "#fff", cursor: "pointer" }}>+</button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); updateGroupCount(g.id, g.count + 1); }}
+                              disabled={totalParticipants >= MAX_FOCUS_GROUP_PARTICIPANTS}
+                              style={{
+                                width: 22, height: 22, borderRadius: 6, border: `1px solid ${C.line}`,
+                                background: "#fff",
+                                cursor: totalParticipants >= MAX_FOCUS_GROUP_PARTICIPANTS ? "not-allowed" : "pointer",
+                                opacity: totalParticipants >= MAX_FOCUS_GROUP_PARTICIPANTS ? 0.45 : 1,
+                              }}>+</button>
                           </div>
                         </div>
                       </div>
@@ -1576,9 +1698,12 @@ function FocusGroupScreen({
                   <div style={{ marginTop: 12 }}>
                     <button
                       onClick={() => setShowAddGroup(true)}
+                      disabled={!canAddMoreParticipants}
                       style={{
                         width: "100%", border: `1px dashed ${C.line}`, background: C.bg, color: C.ink,
-                        borderRadius: 10, padding: "14px 12px", fontFamily: F.body, fontSize: 14, fontWeight: 600, cursor: "pointer",
+                        borderRadius: 10, padding: "14px 12px", fontFamily: F.body, fontSize: 14, fontWeight: 600,
+                        cursor: !canAddMoreParticipants ? "not-allowed" : "pointer",
+                        opacity: !canAddMoreParticipants ? 0.45 : 1,
                       }}
                     >
                       + Add custom audience group
@@ -1586,68 +1711,100 @@ function FocusGroupScreen({
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
+                <div style={{ display: "grid", gap: 14 }}>
                   <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
                     <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 10 }}>
-                      Audience Diversity
+                      Campaign Summary Sheet
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                      {(["low", "medium", "high"] as const).map((v) => (
-                        <button key={v} onClick={() => setAudienceDiversity(v)} style={{
-                          padding: "8px 0", borderRadius: 8, cursor: "pointer",
-                          border: `1px solid ${audienceDiversity === v ? C.ink : C.line}`,
-                          background: audienceDiversity === v ? C.ink : "transparent",
-                          color: audienceDiversity === v ? C.accentInk : C.muted, fontWeight: 600,
-                        }}>{v[0].toUpperCase() + v.slice(1)}</button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-                      Controls how different participants are, even inside the same persona group.
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                      <SummaryCell label="Name" value={plan.name} />
+                      <SummaryCell label="Timeline" value={plan.timeline} />
+                      <SummaryCell label="Target Audience" value={plan.targetAudience} />
+                      <SummaryCell label="Location / Markets" value={plan.location} />
+                      <SummaryCell label="Key Message" value={plan.keyMessage} />
+                      <SummaryCell label="Slogan / Hashtag" value={`${plan.slogan} · ${plan.hashtag}`} />
                     </div>
                   </div>
 
                   <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
-                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 10 }}>
-                      Critique Rigour
+                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 12 }}>
+                      Focus Group Settings
                     </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-                      {([
-                        ["light", "Supportive"],
-                        ["balanced", "Balanced"],
-                        ["harsh", "Harsh"],
-                      ] as const).map(([v, label]) => (
-                        <button key={v} onClick={() => setCritiqueRigour(v)} style={{
-                          padding: "8px 0", borderRadius: 8, cursor: "pointer",
-                          border: `1px solid ${critiqueRigour === v ? C.ink : C.line}`,
-                          background: critiqueRigour === v ? C.ink : "transparent",
-                          color: critiqueRigour === v ? C.accentInk : C.muted, fontWeight: 600,
-                        }}>{label}</button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-                      Scale for how rigorous participants will critique the campaign.
-                    </div>
-                  </div>
+                    <div style={{ display: "grid", gap: 12 }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>Audience Diversity</span>
+                          <InfoDot onClick={() => setInfoOpen((p) => (p === "diversity" ? null : "diversity"))} />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+                          {(["low", "medium", "high"] as const).map((v) => (
+                            <button key={v} onClick={() => setAudienceDiversity(v)} style={{
+                              padding: "8px 0", borderRadius: 8, cursor: "pointer",
+                              border: `1px solid ${audienceDiversity === v ? C.ink : C.line}`,
+                              background: audienceDiversity === v ? C.ink : "transparent",
+                              color: audienceDiversity === v ? C.accentInk : C.muted, fontWeight: 600,
+                            }}>{v[0].toUpperCase() + v.slice(1)}</button>
+                          ))}
+                        </div>
+                        {infoOpen === "diversity" && (
+                          <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+                            Controls how different participants are, even inside the same persona group.
+                          </div>
+                        )}
+                      </div>
 
-                  <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 12, padding: 16 }}>
-                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 10 }}>
-                      Feedback Depth
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-                      {([
-                        ["quick", "Quick reactions"],
-                        ["in-depth", "In-depth discussion"],
-                      ] as const).map(([v, label]) => (
-                        <button key={v} onClick={() => setFeedbackDepth(v)} style={{
-                          padding: "8px 0", borderRadius: 8, cursor: "pointer",
-                          border: `1px solid ${feedbackDepth === v ? C.ink : C.line}`,
-                          background: feedbackDepth === v ? C.ink : "transparent",
-                          color: feedbackDepth === v ? C.accentInk : C.muted, fontWeight: 600,
-                        }}>{label}</button>
-                      ))}
-                    </div>
-                    <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
-                      In-depth enables Transcript tab. Quick keeps Conclusion + Personas only.
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>Critique Rigour</span>
+                            <InfoDot onClick={() => setInfoOpen((p) => (p === "rigour" ? null : "rigour"))} />
+                          </div>
+                          <span style={{ fontFamily: F.display, fontSize: 16, fontWeight: 700, color: C.ink }}>{critiqueRigour}/10</span>
+                        </div>
+                        <input
+                          type="range"
+                          min={1}
+                          max={10}
+                          step={1}
+                          value={critiqueRigour}
+                          onChange={(e) => setCritiqueRigour(Number(e.target.value))}
+                          style={{ width: "100%" }}
+                        />
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: C.faint, marginTop: 3 }}>
+                          <span>Supportive</span>
+                          <span>Harsh</span>
+                        </div>
+                        {infoOpen === "rigour" && (
+                          <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+                            Sets how tough the panel is when critiquing the campaign. Higher numbers mean stricter criticism.
+                          </div>
+                        )}
+                      </div>
+
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>Feedback Depth</span>
+                          <InfoDot onClick={() => setInfoOpen((p) => (p === "depth" ? null : "depth"))} />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+                          {([
+                            ["quick", "Quick reactions"],
+                            ["in-depth", "In-depth discussion"],
+                          ] as const).map(([v, label]) => (
+                            <button key={v} onClick={() => setFeedbackDepth(v)} style={{
+                              padding: "8px 0", borderRadius: 8, cursor: "pointer",
+                              border: `1px solid ${feedbackDepth === v ? C.ink : C.line}`,
+                              background: feedbackDepth === v ? C.ink : "transparent",
+                              color: feedbackDepth === v ? C.accentInk : C.muted, fontWeight: 600,
+                            }}>{label}</button>
+                          ))}
+                        </div>
+                        {infoOpen === "depth" && (
+                          <div style={{ fontSize: 11, color: C.faint, marginTop: 8, lineHeight: 1.45 }}>
+                            In-depth enables Transcript tab. Quick keeps Conclusion + Personas only.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1742,22 +1899,55 @@ function FocusGroupScreen({
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, fontSize: 13, color: C.ink }}>
                       <span>{audienceDiversity[0].toUpperCase() + audienceDiversity.slice(1)}</span>
-                      <span>{critiqueRigour[0].toUpperCase() + critiqueRigour.slice(1)}</span>
+                      <span>{critiqueRigour}/10</span>
                       <span>{activeGroup.count}</span>
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 10 }}>
-                    {buildGroupParticipantPreview(activeGroup).map((p, i) => (
-                      <div key={`${p.name}-${i}`} style={{ background: C.bg, border: `1px solid ${C.line}`, borderRadius: 10, padding: 12 }}>
-                        <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 700, marginBottom: 4 }}>{p.name}</div>
-                        <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 8 }}>{p.concern}</div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".05em", textTransform: "uppercase" }}>
-                          <span>{sentimentLabel(p.sentiment)}</span>
-                          <span>{p.channel}</span>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 12 }}>
+                    {buildGroupParticipantPreview(activeGroup).map((p, i) => {
+                      const tone = sentimentColor(p.sentiment);
+                      return (
+                        <div key={`${p.name}-${i}`} style={{ background: C.bg, border: `1px solid ${tone}55`, borderRadius: 10, padding: 12 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                            <div style={{ fontFamily: F.display, fontSize: 14, fontWeight: 700 }}>{p.name}</div>
+                            <span style={{ fontFamily: F.mono, fontSize: 10, color: tone, fontWeight: 700, letterSpacing: ".05em", textTransform: "uppercase" }}>
+                              {sentimentLabel(p.sentiment)}
+                            </span>
+                          </div>
+                          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 10 }}>{p.concern}</div>
+
+                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                            <div>
+                              <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".09em", textTransform: "uppercase", marginBottom: 6 }}>Demographics</div>
+                              <div style={{ fontSize: 11, color: C.ink2, lineHeight: 1.55 }}>
+                                <div><strong>Age:</strong> {p.ageRange}</div>
+                                <div><strong>Gender:</strong> {p.gender}</div>
+                                <div><strong>Location:</strong> {p.location}</div>
+                                <div><strong>Income:</strong> {p.incomeLevel}</div>
+                                <div><strong>Education:</strong> {p.education}</div>
+                                <div><strong>Occupation:</strong> {p.occupation}</div>
+                              </div>
+                            </div>
+                            <div>
+                              <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".09em", textTransform: "uppercase", marginBottom: 6 }}>Psychographics</div>
+                              <div style={{ display: "grid", gap: 6 }}>
+                                <DetailChipRow label="Interests" items={p.interests} />
+                                <DetailChipRow label="Values" items={p.values} />
+                                <DetailChipRow label="Personality" items={p.personalityTraits} />
+                                <DetailChipRow label="Media" items={p.mediaHabits} />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div style={{ borderTop: `1px solid ${C.lineSoft}`, marginTop: 10, paddingTop: 8, fontSize: 11, color: C.muted, lineHeight: 1.5 }}>
+                            <div><strong>VALS style:</strong> {p.valsStyle}</div>
+                            <div><strong>Brand affinities:</strong> {p.brandAffinities}</div>
+                            <div><strong>Main channel:</strong> {p.channel}</div>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </div>
@@ -1773,7 +1963,7 @@ function FocusGroupScreen({
             }}>
               <div style={{ display: "flex", gap: 28, flexShrink: 0 }}>
                 <SummaryStat label="Mood" val={sentimentLabel(avg)} tone={avg >= 60 ? "good" : avg >= 40 ? "warn" : "bad"} />
-                <SummaryStat label="Participants" val={`${generatedPanel.length}`} />
+                <SummaryStat label="Participants" val={`${generatedPanel.length}/${MAX_FOCUS_GROUP_PARTICIPANTS}`} />
                 <SummaryStat label="Exchanges" val={feedbackDepth === "in-depth" ? `${transcript.length}` : "—"} />
                 <SummaryStat label="Risk band" val={simResult.risk} tone={simResult.risk === "LOW" ? "good" : simResult.risk === "MEDIUM" ? "warn" : "bad"} />
               </div>
@@ -2162,6 +2352,55 @@ function SummaryStat({ label, val, tone }: { label: string; val: string; tone?: 
         fontWeight: 700, color, letterSpacing: "-0.01em", lineHeight: 1.15,
         whiteSpace: "nowrap",
       }}>{val}</div>
+    </div>
+  );
+}
+
+function DetailChipRow({ label, items }: { label: string; items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <div>
+      <div style={{ fontFamily: F.mono, fontSize: 9, color: C.faint, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 4 }}>
+        {label}
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+        {items.slice(0, 4).map((item) => (
+          <span key={item} style={{ padding: "2px 7px", borderRadius: 999, fontFamily: F.mono, fontSize: 9, color: C.ink2, background: C.lineSoft }}>
+            {item}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function InfoDot({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-label="Show info"
+      style={{
+        width: 16, height: 16, borderRadius: 999,
+        border: `1px solid ${C.line}`, background: C.bg, color: C.muted,
+        fontFamily: F.mono, fontSize: 10, lineHeight: 1,
+        display: "inline-flex", alignItems: "center", justifyContent: "center",
+        cursor: "pointer", padding: 0,
+      }}
+    >
+      i
+    </button>
+  );
+}
+
+function SummaryCell({ label, value }: { label: string; value: string }) {
+  return (
+    <div style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 8, padding: "8px 10px" }}>
+      <div style={{ fontFamily: F.mono, fontSize: 9, color: C.faint, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 3 }}>
+        {label}
+      </div>
+      <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.4 }}>
+        {value || "—"}
+      </div>
     </div>
   );
 }
