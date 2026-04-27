@@ -214,6 +214,217 @@ const COMMENTS: Comment[] = [
   { id: 5, user: "@outfitdiaryamy · 26m ago", text: '"Okay these picks are actually fire for the price. Saved three looks already. ✨"', type: "positive" },
 ];
 
+/** Illustrative US-style marginal shares per slot (sum ≈ 1 within each dimension). Joint % = product × 100 — rough intuition only. */
+const PERSONA_TRAIT_WHEEL_DIMS = [
+  {
+    label: "Gender",
+    options: [
+      { text: "male", share: 0.49 },
+      { text: "female", share: 0.49 },
+      { text: "non-binary", share: 0.014 },
+      { text: "trans masculine", share: 0.003 },
+      { text: "trans feminine", share: 0.003 },
+    ],
+  },
+  {
+    label: "Faith / worldview",
+    options: [
+      { text: "Christian", share: 0.63 },
+      { text: "Muslim", share: 0.012 },
+      { text: "Jewish", share: 0.022 },
+      { text: "Hindu", share: 0.009 },
+      { text: "Buddhist", share: 0.009 },
+      { text: "secular", share: 0.26 },
+      { text: "spiritual-not-religious", share: 0.058 },
+    ],
+  },
+  {
+    label: "Politics",
+    options: [
+      { text: "progressive-left", share: 0.08 },
+      { text: "liberal", share: 0.22 },
+      { text: "moderate", share: 0.38 },
+      { text: "conservative", share: 0.26 },
+      { text: "libertarian", share: 0.04 },
+      { text: "apolitical", share: 0.02 },
+    ],
+  },
+  {
+    label: "Education",
+    options: [
+      { text: "high school", share: 0.28 },
+      { text: "some college", share: 0.29 },
+      { text: "college degree", share: 0.22 },
+      { text: "graduate degree", share: 0.14 },
+      { text: "trade certification", share: 0.07 },
+    ],
+  },
+  {
+    label: "Segment",
+    options: [
+      { text: "Urban Gen Z", share: 0.22 },
+      { text: "Suburban Millennials", share: 0.26 },
+      { text: "Urban Millennials", share: 0.24 },
+      { text: "Small-town Gen Z", share: 0.14 },
+      { text: "Rural Gen X", share: 0.14 },
+    ],
+  },
+] as const;
+
+function pickRandomTraitOption<const T extends readonly { text: string; share: number }[]>(options: T): T[number] {
+  return options[Math.floor(Math.random() * options.length)]!;
+}
+
+function jointTraitCoverageFraction(traits: string[]): number {
+  let p = 1;
+  for (let i = 0; i < PERSONA_TRAIT_WHEEL_DIMS.length; i++) {
+    const dim = PERSONA_TRAIT_WHEEL_DIMS[i];
+    const opt = dim.options.find((o) => o.text === traits[i]);
+    p *= opt?.share ?? 1 / dim.options.length;
+  }
+  return p;
+}
+
+function formatRoughAudienceCoverage(fraction: number): { pctLabel: string; oneInLabel: string | null } {
+  const pct = fraction * 100;
+  let pctLabel: string;
+  if (pct >= 10) pctLabel = `~${pct.toFixed(1)}%`;
+  else if (pct >= 1) pctLabel = `~${pct.toFixed(2)}%`;
+  else if (pct >= 0.1) pctLabel = `~${pct.toFixed(3)}%`;
+  else pctLabel = `~${pct.toFixed(4)}%`;
+
+  let oneInLabel: string | null = null;
+  if (fraction > 0 && fraction < 0.2) {
+    const inv = Math.round(1 / fraction);
+    if (inv >= 10) oneInLabel = `≈ 1 in ${inv.toLocaleString()}`;
+  }
+  return { pctLabel, oneInLabel };
+}
+
+function PersonaTraitWheelDemo() {
+  const dimCount = PERSONA_TRAIT_WHEEL_DIMS.length;
+  const [traits, setTraits] = useState<string[]>(() =>
+    PERSONA_TRAIT_WHEEL_DIMS.map((d) => pickRandomTraitOption(d.options).text),
+  );
+  const [spinning, setSpinning] = useState(false);
+  const spinIntervalRef = useRef<number | null>(null);
+  const spinStopRef = useRef<number | null>(null);
+
+  const coverageFraction = jointTraitCoverageFraction(traits);
+  const coverageFormatted = formatRoughAudienceCoverage(coverageFraction);
+
+  useEffect(() => {
+    return () => {
+      if (spinIntervalRef.current != null) window.clearInterval(spinIntervalRef.current);
+      if (spinStopRef.current != null) window.clearTimeout(spinStopRef.current);
+    };
+  }, []);
+
+  const spin = () => {
+    if (spinning) return;
+    setSpinning(true);
+    if (spinIntervalRef.current != null) window.clearInterval(spinIntervalRef.current);
+    spinIntervalRef.current = window.setInterval(() => {
+      setTraits(PERSONA_TRAIT_WHEEL_DIMS.map((d) => pickRandomTraitOption(d.options).text));
+    }, 52);
+    if (spinStopRef.current != null) window.clearTimeout(spinStopRef.current);
+    spinStopRef.current = window.setTimeout(() => {
+      if (spinIntervalRef.current != null) {
+        window.clearInterval(spinIntervalRef.current);
+        spinIntervalRef.current = null;
+      }
+      setTraits(PERSONA_TRAIT_WHEEL_DIMS.map((d) => pickRandomTraitOption(d.options).text));
+      setSpinning(false);
+      spinStopRef.current = null;
+    }, 1850);
+  };
+
+  return (
+    <div style={{ marginTop: 14, marginBottom: 14 }}>
+      <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 8 }}>
+        Try it
+      </div>
+      <div style={{ background: C.lineSoft, border: `1px solid ${C.line}`, borderRadius: 10, padding: "14px 14px 12px", fontSize: 13, color: C.muted, lineHeight: 1.55 }}>
+        <p style={{ margin: "0 0 10px", fontSize: 12, color: C.faint, lineHeight: 1.45 }}>
+          Spin to randomize each bracket.
+        </p>
+        <button
+          type="button"
+          onClick={spin}
+          disabled={spinning}
+          style={{
+            fontFamily: F.mono,
+            fontSize: 11,
+            letterSpacing: ".06em",
+            textTransform: "uppercase",
+            padding: "8px 14px",
+            borderRadius: 8,
+            border: `1px solid ${spinning ? C.line : C.ink}`,
+            background: spinning ? C.lineSoft : C.ink,
+            color: spinning ? C.muted : C.accentInk,
+            cursor: spinning ? "wait" : "pointer",
+            marginBottom: 14,
+          }}
+        >
+          {spinning ? "Spinning…" : "Spin persona traits"}
+        </button>
+        <div
+          style={{
+            fontSize: 14,
+            color: C.ink2,
+            lineHeight: 1.65,
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "baseline",
+            gap: "6px 8px",
+          }}
+        >
+          <span style={{ fontWeight: 600 }}>This is a</span>
+          {traits.slice(0, dimCount).map((t, i) => (
+            <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 2 }}>
+              <span style={{ color: C.faint, fontFamily: F.mono, fontSize: 13 }}>[</span>
+              <span
+                style={{
+                  fontFamily: F.mono,
+                  fontSize: 13,
+                  padding: "3px 8px",
+                  borderRadius: 6,
+                  border: `1px solid ${spinning ? "#F59E0B" : C.line}`,
+                  background: spinning ? "#FFFBEB" : C.surface,
+                  color: C.ink2,
+                  transition: spinning ? undefined : "border-color 0.15s ease, background 0.15s ease",
+                  boxShadow: spinning ? "0 0 0 1px rgba(245,158,11,0.25)" : undefined,
+                }}
+              >
+                {t}
+              </span>
+              <span style={{ color: C.faint, fontFamily: F.mono, fontSize: 13 }}>]</span>
+            </span>
+          ))}
+        </div>
+        <div style={{ marginTop: 12, paddingTop: 10, borderTop: `1px solid ${C.line}` }}>
+          {spinning ? (
+            <div style={{ fontSize: 13, color: C.faint }}>…</div>
+          ) : (
+            <div style={{ fontSize: 13, color: C.muted, lineHeight: 1.5 }}>
+              About{" "}
+              <span style={{ color: "#F59E0B", fontWeight: 700, fontFamily: F.mono }}>{coverageFormatted.pctLabel}</span>
+              {" "}of the whole audience for this combo
+              {coverageFormatted.oneInLabel ? (
+                <> ({coverageFormatted.oneInLabel}).</>
+              ) : (
+                <>.</>
+              )}
+              {" "}
+              <span style={{ fontSize: 11, color: C.faint }}>Rough estimate.</span>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ===========================================================
    Main component
    =========================================================== */
@@ -1717,39 +1928,30 @@ export default function CampaignSimulator() {
               </div>
 
               <div className="whyMattersGrid">
-                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderLeft: "4px solid #F59E0B", borderRadius: 14, padding: 22 }}>
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
                   <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
                     Failure case - live
                   </div>
                   <div style={{ fontFamily: F.display, fontSize: 25, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 10 }}>
-                    We tried to break it. Here's what happened.
+                    Hallucination at the persona layer
                   </div>
                   <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: "0 0 12px" }}>
-                    We fed CampaignIQ a deliberately ambiguous campaign for a controversial product category. Here's the unedited output:
+                    The failure we saw most often was{" "}
+                    <span style={{ color: C.ink2, textDecoration: "underline", textDecorationColor: "#F59E0B", textUnderlineOffset: 3 }}>hallucination</span>
+                    : the three LLM-generated personas were often not the best stand-ins for the real audience. We randomize personas for variety; that can yield trait combinations that are individually plausible but statistically rare for the segment—almost a{" "}
+                    <span style={{ color: C.ink2, textDecoration: "underline", textDecorationColor: "#F59E0B", textUnderlineOffset: 3 }}>unicorn profile</span>
+                    —so the “room” no longer matches who the campaign is actually for. Grounding this well requires a{" "}
+                    <span style={{ color: C.ink2, textDecoration: "underline", textDecorationColor: "#F59E0B", textUnderlineOffset: 3 }}>much larger dataset</span>
+                    {" "}so the model learns which traits reliably co-occur for real personas.
                   </p>
-                  <div style={{ background: C.lineSoft, border: `1px solid ${C.line}`, borderRadius: 10, padding: 10, marginBottom: 10 }}>
-                    <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 5 }}>Input copy</div>
-                    <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.5 }}>"Our new product is here. It's better than the rest. Buy now."</div>
-                  </div>
-                  <div style={{ border: `1px solid ${C.line}`, borderRadius: 10, overflow: "hidden", marginBottom: 10 }}>
-                    <div style={{ display: "grid", gridTemplateColumns: "92px 100px 1fr", gap: 10, padding: "8px 10px", background: C.lineSoft, borderBottom: `1px solid ${C.line}`, fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase" }}>
-                      <div>Segment</div><div>Sentiment</div><div>Issue</div>
-                    </div>
-                    {[
-                      ["Gen Z", "71% positive", "Hallucinated specifics - invented \"sustainability claims\" not in copy"],
-                      ["Parents", "68% positive", "Over-confident - vague copy shouldn't produce confident predictions"],
-                      ["Professionals", "64% positive", "Bias toward generic positivity when input lacks signal"],
-                    ].map(([segment, score, issue]) => (
-                      <div key={segment} style={{ display: "grid", gridTemplateColumns: "92px 100px 1fr", gap: 10, padding: "8px 10px", borderBottom: `1px solid ${C.line}` }}>
-                        <div style={{ fontSize: 13, color: C.ink2 }}>{segment}</div>
-                        <div style={{ fontSize: 13, color: C.ink2 }}>{score}</div>
-                        <div style={{ fontSize: 13, color: "#EF4444", lineHeight: 1.45 }}>{issue}</div>
-                      </div>
-                    ))}
-                  </div>
-                  <div style={{ background: "#FFFBEB", border: "1px solid #F59E0B", borderRadius: 9, padding: "9px 10px", fontSize: 13, color: "#92400E", lineHeight: 1.5 }}>
-                    What this tells us: When given low-signal input, the model defaults to generic optimism rather than flagging insufficient information. This is a known failure mode we're actively working on.
-                  </div>
+                  <PersonaTraitWheelDemo />
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: 0 }}>
+                    This stays a live limitation for us: expanding data and retraining takes{" "}
+                    <span style={{ color: C.ink2, textDecoration: "underline", textDecorationColor: "#F59E0B", textUnderlineOffset: 3 }}>time and budget</span>
+                    {" "}we didn’t have left in this project to iterate further—so we’re transparent that{" "}
+                    <span style={{ color: C.ink2, textDecoration: "underline", textDecorationColor: "#F59E0B", textUnderlineOffset: 3 }}>persona quality</span>
+                    {" "}is where we’d invest next.
+                  </p>
                 </div>
 
                 <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
@@ -1761,7 +1963,7 @@ export default function CampaignSimulator() {
                   </div>
                   <div style={{ display: "grid", gap: 10 }}>
                     {[
-                      ["🛡️", "Input validation", "Minimum-length check, content moderation API, profanity and harmful-content filters before any input reaches the model."],
+                      ["🛡️", "Input validation", "Minimum-length check, content moderation API, profanity and harmful-content filters."],
                       ["📉", "Confidence thresholds", "If model confidence falls below 60%, the system returns \"insufficient signal\" instead of fabricated metrics."],
                       ["👥", "Human-in-the-loop", "Enterprise tier includes optional human review of edge-case simulations before they're delivered to customers."],
                       ["🔁", "Fallback responses", "For ambiguous or out-of-domain inputs, the system surfaces a \"needs human review\" message rather than guessing."],
@@ -1806,14 +2008,14 @@ export default function CampaignSimulator() {
                   <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>
                     How we'd measure quality
                   </div>
-                  <div style={{ fontFamily: F.display, fontSize: 25, fontWeight: 700, letterSpacing: "-0.01em", marginBottom: 12 }}>
-                    Three loops, always running
-                  </div>
+                  <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.62, margin: "0 0 14px" }}>
+                    Pitch-stage today: no live campaign data in-product yet, so outcomes aren't validated end-to-end. After launch, we'd measure quality like this:
+                  </p>
                   <div style={{ display: "grid", gap: 10, marginBottom: 12 }}>
                     {[
-                      ["01", "Backtesting", "Run new model versions against the 120-campaign historical benchmark. Track sentiment correlation and backlash-detection accuracy over time."],
-                      ["02", "User feedback loop", "Every simulation includes a thumbs-up / thumbs-down - flagged outputs feed back into our evaluation set within 24 hours."],
-                      ["03", "Adversarial red-teaming", "Quarterly stress tests with deliberately ambiguous, biased, or out-of-distribution inputs. Failures trigger guardrail updates before the next release."],
+                      ["01", "User feedback loop", "Thumbs on every simulation. Flagged outputs enter our eval set within 24 hours—fast feedback from real disagreement."],
+                      ["02", "Real-campaign backtesting", "Early-access partners: ship copy plus actual public response. Each run checks whether predicted sentiment matched reality."],
+                      ["03", "Continuous fine-tuning", "Fine-tune on accumulated real campaigns—shift from generic LLM behavior to a model specialized on campaign reactions. Quality rises with volume."],
                     ].map(([num, title, copy]) => (
                       <div key={num} style={{ display: "grid", gridTemplateColumns: "30px 1fr", gap: 10, alignItems: "start" }}>
                         <div style={{ width: 30, height: 20, borderRadius: 999, background: C.lineSoft, color: C.ink2, fontFamily: F.mono, fontSize: 10, letterSpacing: ".06em", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -1827,7 +2029,7 @@ export default function CampaignSimulator() {
                     ))}
                   </div>
                   <div style={{ background: "#EFF6FF", border: "1px solid #2563EB", borderRadius: 9, padding: "9px 10px", fontSize: 13, color: "#1E3A8A", lineHeight: 1.5 }}>
-                    At scale, we'd add: differential privacy auditing, third-party bias evaluation, and a public model card updated with each release.
+                    At scale: third-party bias audits, a public model card every release, and benchmark transparency so customers see performance over time.
                   </div>
                 </div>
               </div>
