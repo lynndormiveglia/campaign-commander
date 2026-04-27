@@ -478,15 +478,67 @@ export default function CampaignSimulator() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24, alignItems: "start" }}>
-                {/* LEFT — Form */}
-                <CampaignFormCard
-                  plan={plan}
-                  updateField={updateField}
-                  onSimulate={runSimulation}
-                  simulating={simulating}
-                  error={simError}
-                  ctaLabel="Simulate Audience Reaction"
-                />
+                {/* LEFT — Form + (after sim) risk meter + CTA */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                  <CampaignFormCard
+                    plan={plan}
+                    updateField={updateField}
+                    onSimulate={runSimulation}
+                    simulating={simulating}
+                    error={simError}
+                    ctaLabel="Simulate Audience Reaction"
+                  />
+
+                  {simResult && (
+                    <div className="fadeIn" style={{
+                      background: C.surface, border: `1px solid ${C.line}`,
+                      borderRadius: 12, padding: "14px 18px",
+                    }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
+                        <div style={{ flexShrink: 0, maxWidth: 260 }}>
+                          <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 2 }}>
+                            Backlash Risk
+                          </div>
+                          <div style={{
+                            fontFamily: F.display, fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em",
+                            color: simResult.risk === "LOW" ? C.good : simResult.risk === "MEDIUM" ? C.warn : C.bad,
+                            lineHeight: 1.1,
+                          }}>
+                            {simResult.risk}
+                          </div>
+                          <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
+                            {riskBlurb(simResult.risk)}
+                          </div>
+                        </div>
+                        <div style={{ flex: 1, minWidth: 220 }}>
+                          <RiskMeter score={simResult.riskScore} compact />
+                        </div>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.lineSoft}` }}>
+                        <p style={{ flex: 1, minWidth: 220, fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
+                          {simResult.riskRationale}
+                        </p>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
+                          {simResult.tones.map((t) => (
+                            <span key={t} style={{
+                              fontFamily: F.mono, fontSize: 11, color: C.ink,
+                              background: C.lineSoft, padding: "3px 9px", borderRadius: 999,
+                              letterSpacing: ".03em",
+                            }}>{t}</span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {simResult && (
+                    <div className="fadeIn" style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <button onClick={() => goTo(5)} style={primaryBtnStyle()}>
+                        See how to improve →
+                      </button>
+                    </div>
+                  )}
+                </div>
 
                 {/* RIGHT — Audience segments + custom personas */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
@@ -555,7 +607,7 @@ export default function CampaignSimulator() {
                       </button>
                     </div>
                     <p style={{ fontSize: 11, color: C.faint, lineHeight: 1.5, marginBottom: 12 }}>
-                      Describe a synthetic panelist in your own words — they'll be added to your panel just like the AI-generated ones.
+                      Describe a slice of your audience in your own words — we'll turn it into a broad audience tag and add it to your panel.
                     </p>
 
                     {hintsOpen && <PersonaHintPanel />}
@@ -565,7 +617,7 @@ export default function CampaignSimulator() {
                         value={draftDescription}
                         onChange={(e) => setDraftDescription(e.target.value)}
                         rows={5}
-                        placeholder="e.g. Mid-30s urban renter, sustainability-minded but price-sensitive, watches a lot of YouTube, doesn't trust greenwashing claims."
+                        placeholder="e.g. Mid-30s urban renters, sustainability-minded but price-sensitive, watch a lot of YouTube, distrust greenwashing claims."
                         style={inputStyle(false)}
                       />
                       <button
@@ -591,78 +643,6 @@ export default function CampaignSimulator() {
                 </div>
               </div>
 
-              {/* Inline simulation results — compact stacking */}
-              {simResult && (
-                <div style={{ marginTop: 24, display: "grid", gap: 12 }} className="fadeIn">
-                  {/* Risk meter — top, compact card with tones inline */}
-                  <div style={{
-                    background: C.surface, border: `1px solid ${C.line}`,
-                    borderRadius: 12, padding: "14px 18px",
-                  }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 18, flexWrap: "wrap" }}>
-                      <div style={{ flexShrink: 0, maxWidth: 260 }}>
-                        <div style={{ fontFamily: F.mono, fontSize: 9, color: C.muted, letterSpacing: ".12em", textTransform: "uppercase", marginBottom: 2 }}>
-                          Backlash Risk
-                        </div>
-                        <div style={{
-                          fontFamily: F.display, fontSize: 20, fontWeight: 700, letterSpacing: "-0.01em",
-                          color: simResult.risk === "LOW" ? C.good : simResult.risk === "MEDIUM" ? C.warn : C.bad,
-                          lineHeight: 1.1,
-                        }}>
-                          {simResult.risk}
-                        </div>
-                        <div style={{ fontSize: 12, color: C.muted, marginTop: 4, lineHeight: 1.45 }}>
-                          {riskBlurb(simResult.risk)}
-                        </div>
-                      </div>
-                      <div style={{ flex: 1, minWidth: 220 }}>
-                        <RiskMeter score={simResult.riskScore} compact />
-                      </div>
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 10, paddingTop: 10, borderTop: `1px solid ${C.lineSoft}` }}>
-                      <p style={{ flex: 1, minWidth: 220, fontSize: 12, color: C.muted, lineHeight: 1.55, margin: 0 }}>
-                        {simResult.riskRationale}
-                      </p>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 5 }}>
-                        {simResult.tones.map((t) => (
-                          <span key={t} style={{
-                            fontFamily: F.mono, fontSize: 11, color: C.ink,
-                            background: C.lineSoft, padding: "3px 9px", borderRadius: 999,
-                            letterSpacing: ".03em",
-                          }}>{t}</span>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Audience Sentiment — compact 3-up grid */}
-                  <SectionHeader>Audience Sentiment</SectionHeader>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
-                    {simResult.segments.map((seg) => {
-                      const tone = sentimentColor(seg.sentimentPct);
-                      return (
-                        <div key={seg.name} style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 10, padding: "12px 14px" }}>
-                          <div style={{ fontFamily: F.display, fontSize: 13, fontWeight: 600, letterSpacing: "-0.01em", marginBottom: 8, lineHeight: 1.25 }}>{seg.name}</div>
-                          <div style={{ height: 3, background: C.lineSoft, borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
-                            <div style={{ height: "100%", width: `${seg.sentimentPct}%`, background: tone }} />
-                          </div>
-                          <div style={{
-                            fontFamily: F.mono, fontSize: 11, fontWeight: 600, color: tone,
-                            letterSpacing: ".05em", textTransform: "uppercase", marginBottom: 6,
-                          }}>{sentimentLabel(seg.sentimentPct)}</div>
-                          <div style={{ fontSize: 12, color: C.muted, lineHeight: 1.45, fontStyle: "italic" }}>"{seg.topReaction}"</div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 6 }}>
-                    <button onClick={() => goTo(5)} style={primaryBtnStyle()}>
-                      See how to improve →
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -674,6 +654,7 @@ export default function CampaignSimulator() {
           <FocusGroupScreen
             simResult={simResult}
             customPersonas={customPersonas}
+            onRemoveCustom={removeCustomPersona}
             onGoSimulate={() => goTo(3)}
             onGoResults={() => goTo(5)}
           />
@@ -815,7 +796,7 @@ export default function CampaignSimulator() {
                             Your Custom Panelists
                           </div>
                           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                            {customPersonas.map((p, i) => <PersonaCard key={`r-c-${i}`} persona={p} customBadge />)}
+                            {customPersonas.map((p, i) => <PersonaCard key={`r-c-${i}`} persona={p} onRemove={() => removeCustomPersona(i)} customBadge />)}
                           </div>
                         </div>
                       )}
@@ -1093,18 +1074,19 @@ function PersonaCard({ persona, onRemove, customBadge }: { persona: Persona; onR
 }
 
 function FocusGroupScreen({
-  simResult, customPersonas, onGoSimulate, onGoResults,
+  simResult, customPersonas, onRemoveCustom, onGoSimulate, onGoResults,
 }: {
   simResult: SimulationResult | null;
   customPersonas: Persona[];
+  onRemoveCustom: (idx: number) => void;
   onGoSimulate: () => void;
   onGoResults: () => void;
 }) {
   const [tab, setTab] = useState<"conclusion" | "personas" | "transcript">("conclusion");
 
-  const allPersonas: Array<{ persona: Persona; custom: boolean }> = useMemo(() => [
-    ...(simResult?.personas ?? []).map((p) => ({ persona: p, custom: false })),
-    ...customPersonas.map((p) => ({ persona: p, custom: true })),
+  const allPersonas: Array<{ persona: Persona; custom: boolean; customIdx: number }> = useMemo(() => [
+    ...(simResult?.personas ?? []).map((p) => ({ persona: p, custom: false, customIdx: -1 })),
+    ...customPersonas.map((p, i) => ({ persona: p, custom: true, customIdx: i })),
   ], [simResult, customPersonas]);
 
   const transcript = useMemo(() => buildTranscript(allPersonas.map((x) => x.persona)), [allPersonas]);
@@ -1238,7 +1220,7 @@ function FocusGroupScreen({
                 <aside style={{ position: "sticky", top: 76 }}>
                   <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 10 }}>Panel</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {allPersonas.map(({ persona, custom }, i) => {
+                    {allPersonas.map(({ persona, custom, customIdx }, i) => {
                       const tone = persona.sentiment >= 60 ? C.good : persona.sentiment >= 40 ? C.warn : C.bad;
                       const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
                       return (
@@ -1246,20 +1228,38 @@ function FocusGroupScreen({
                           background: C.surface, border: `1px solid ${C.line}`,
                           borderRadius: 10, padding: "10px 12px",
                         }}>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                          <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 6 }}>
                             <div style={{
                               width: 28, height: 28, borderRadius: 7,
                               background: avatarBg(i), color: C.ink,
                               display: "flex", alignItems: "center", justifyContent: "center",
                               fontFamily: F.display, fontSize: 11, fontWeight: 700,
+                              flexShrink: 0,
                             }}>{initials}</div>
                             <div style={{ minWidth: 0, flex: 1 }}>
-                              <div style={{ fontFamily: F.display, fontSize: 12, fontWeight: 700, letterSpacing: "-0.01em", display: "flex", alignItems: "center", gap: 6 }}>
-                                {persona.name.split(" ")[0]}
+                              <div style={{
+                                fontFamily: F.display, fontSize: 12, fontWeight: 700, letterSpacing: "-0.01em",
+                                display: "flex", alignItems: "center", gap: 6,
+                                lineHeight: 1.2, flexWrap: "wrap",
+                              }}>
+                                <span>{custom ? persona.name : persona.name.split(" ")[0]}</span>
                                 {custom && <span style={{ fontFamily: F.mono, fontSize: 8, color: C.muted, background: C.lineSoft, padding: "1px 5px", borderRadius: 3 }}>CUSTOM</span>}
                               </div>
-                              <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint }}>{persona.age?.replace(/\s*\(.+?\)/, "")} · {persona.job || "—"}</div>
+                              <div style={{ fontFamily: F.mono, fontSize: 10, color: C.faint, marginTop: 2 }}>
+                                {custom
+                                  ? (persona.job || persona.age?.replace(/\s*\(.+?\)/, "") || "Audience")
+                                  : `${persona.age?.replace(/\s*\(.+?\)/, "")} · ${persona.job || "—"}`}
+                              </div>
                             </div>
+                            {custom && (
+                              <button
+                                onClick={() => onRemoveCustom(customIdx)}
+                                aria-label={`Remove ${persona.name}`}
+                                style={{
+                                  background: "transparent", border: "none", color: C.faint,
+                                  cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1, flexShrink: 0,
+                                }}>✕</button>
+                            )}
                           </div>
                           <div style={{ height: 4, background: C.lineSoft, borderRadius: 2, overflow: "hidden" }}>
                             <div style={{ height: "100%", width: `${persona.sentiment}%`, background: tone, borderRadius: 2 }} />
@@ -1277,8 +1277,14 @@ function FocusGroupScreen({
 
             {tab === "personas" && (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 16 }}>
-                {allPersonas.map(({ persona, custom }, i) => (
-                  <FocusPersonaCard key={`fp-${i}`} persona={persona} custom={custom} index={i} />
+                {allPersonas.map(({ persona, custom, customIdx }, i) => (
+                  <FocusPersonaCard
+                    key={`fp-${i}`}
+                    persona={persona}
+                    custom={custom}
+                    index={i}
+                    onRemove={custom ? () => onRemoveCustom(customIdx) : undefined}
+                  />
                 ))}
               </div>
             )}
@@ -1407,9 +1413,8 @@ function ConclusionTab({
   );
 }
 
-function FocusPersonaCard({ persona, custom, index }: { persona: Persona; custom: boolean; index: number }) {
+function FocusPersonaCard({ persona, custom, index, onRemove }: { persona: Persona; custom: boolean; index: number; onRemove?: () => void }) {
   const tone = sentimentColor(persona.sentiment);
-  const toneSoft = persona.sentiment >= 60 ? C.goodSoft : persona.sentiment >= 40 ? C.warnSoft : C.badSoft;
   const label = sentimentLabel(persona.sentiment);
   const initials = (persona.name.split(" ").map((s) => s[0]).join("") || "?").slice(0, 2).toUpperCase();
   return (
@@ -1417,12 +1422,19 @@ function FocusPersonaCard({ persona, custom, index }: { persona: Persona; custom
       background: C.surface, border: `1px solid ${C.line}`,
       borderRadius: 14, padding: 20, position: "relative", overflow: "hidden",
     }}>
-      <span style={{
-        position: "absolute", top: 16, right: 16,
-        padding: "3px 10px", borderRadius: 999, fontSize: 11, fontWeight: 600,
-        background: toneSoft, color: tone, fontFamily: F.mono, letterSpacing: ".04em",
-      }}>{label}</span>
-      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14, paddingRight: 96 }}>
+      {onRemove && (
+        <button
+          onClick={onRemove}
+          aria-label={`Remove ${persona.name}`}
+          style={{
+            position: "absolute", top: 14, right: 14,
+            width: 24, height: 24, borderRadius: 6,
+            background: "transparent", border: `1px solid ${C.line}`,
+            color: C.faint, cursor: "pointer", fontSize: 13, lineHeight: 1,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>✕</button>
+      )}
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", marginBottom: 14, paddingRight: onRemove ? 36 : 0 }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12,
           background: avatarBg(index), color: C.ink,

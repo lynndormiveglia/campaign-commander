@@ -300,18 +300,18 @@ export type PersonaScoreResponse =
   | { ok: true; persona: Persona }
   | { ok: false; error: string };
 
-const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a free-form description of a target audience member and the campaign copy, produce a realistic synthetic individual focus-group participant. Infer any missing details (lifestyle, generation, occupation, mindset, etc.) from the description.
+const PERSONA_SYSTEM = `You are a consumer-research analyst. Given a free-form description of a target audience and the campaign copy, produce a synthetic AUDIENCE TAG (a broad consumer group, NOT a single named individual) that captures who the marketer described.
 
 NEVER surface academic framework names (e.g. "VALS", "Pew typology", "Innovators", "Strivers", "Achievers") in any output field — use plain English a marketer would recognize.
 
 You MUST call the return_persona tool with:
-- name: a realistic first + last name (e.g. "Maya Patel", "Jordan Reeves") — NEVER a category label.
-- archetype: a plain-English one-line lifestyle/mindset descriptor (e.g. "Pragmatic budget shopper", "Principled sustainability advocate"). No framework jargon.
+- name: a broad audience-tag label, NOT a person's first/last name. Examples: "Eco-Critical Gen Z Shoppers", "Pragmatic Millennial Parents", "Status-Driven Suburban Strivers", "Skeptical Gen X Professionals". Build it from generation + lifestyle + mindset cues you infer from the description.
+- archetype: a plain-English one-line lifestyle/mindset descriptor for this group (e.g. "Principled sustainability advocates", "Budget-driven seasonal shoppers"). No framework jargon.
 - age: generational range like "Millennials (29–44)" (inferred from description).
-- job: a realistic occupation (e.g. "High-school teacher", "Product manager").
-- traits: an array of EXACTLY 3 short adjectives describing personality.
-- sentiment: integer 0–100 (their predicted positive sentiment toward the campaign copy).
-- quote: ~120 chars in their personal voice reacting to the copy.`;
+- job: a representative lifestyle/occupation phrase for this group (e.g. "Students & young creatives", "Corporate parents", "Service workers"). If it doesn't apply, return an empty string.
+- traits: an array of EXACTLY 3 short adjectives describing this group's collective personality (e.g. ["Vocal","Skeptical","Trend-driven"]).
+- sentiment: integer 0–100 (the group's predicted positive sentiment toward the campaign copy).
+- quote: ~120 chars in this group's collective voice reacting to the copy. Phrase it as if a representative member of the group is speaking ("we" or first-person plural is fine).`;
 
 export const scorePersona = createServerFn({ method: "POST" })
   .inputValidator((data: { description: string; copy: string }) => {
