@@ -143,6 +143,7 @@ export default function CampaignSimulator() {
   const [simError, setSimError] = useState<string | null>(null);
 
   const [appliedFixes, setAppliedFixes] = useState<Set<FieldKey>>(new Set());
+  const [originalValues, setOriginalValues] = useState<Map<FieldKey, string>>(new Map());
   const [hoverFlag, setHoverFlag] = useState<FieldKey | null>(null);
 
   const countdown = useCountdown(23 * 3600 + 59 * 60);
@@ -169,6 +170,7 @@ export default function CampaignSimulator() {
     setSimulating(true);
     setSimError(null);
     setAppliedFixes(new Set());
+    setOriginalValues(new Map());
     try {
       const response = await simulateFn({ data: { plan } });
       if (!response.ok) setSimError(response.error);
@@ -188,8 +190,32 @@ export default function CampaignSimulator() {
   }, [simResult]);
 
   const applyFix = (flag: FieldFlag) => {
+    setOriginalValues((prev) => {
+      if (prev.has(flag.field)) return prev;
+      const next = new Map(prev);
+      next.set(flag.field, plan[flag.field]);
+      return next;
+    });
     setPlan((p) => ({ ...p, [flag.field]: flag.fix }));
     setAppliedFixes((prev) => new Set(prev).add(flag.field));
+    setHoverFlag(null);
+  };
+
+  const undoFix = (field: FieldKey) => {
+    const original = originalValues.get(field);
+    if (original !== undefined) {
+      setPlan((p) => ({ ...p, [field]: original }));
+    }
+    setOriginalValues((prev) => {
+      const next = new Map(prev);
+      next.delete(field);
+      return next;
+    });
+    setAppliedFixes((prev) => {
+      const next = new Set(prev);
+      next.delete(field);
+      return next;
+    });
   };
 
   const draftReady = draftDescription.trim().length >= 3;
@@ -222,6 +248,7 @@ export default function CampaignSimulator() {
     { label: "Simulate",    screen: 3 },
     { label: "Results",     screen: 5 },
     { label: "Focus Group", screen: 4 },
+    { label: "About",       screen: 6 },
   ];
 
   return (
@@ -382,7 +409,7 @@ export default function CampaignSimulator() {
                     ].map((s) => (
                       <div key={s.label} style={{ background: "rgba(255,255,255,.04)", border: "1px solid rgba(255,255,255,.08)", borderRadius: 10, padding: 18 }}>
                         <div style={{ fontFamily: F.mono, fontSize: 10, color: "rgba(255,255,255,.4)", textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 8 }}>{s.label}</div>
-                        <div style={{ fontFamily: F.display, fontSize: 26, fontWeight: 700, color: "#fff" }}>{s.val}</div>
+                        <div style={{ fontFamily: F.display, fontSize: 26, fontWeight: 700, color: "#FCA5A5" }}>{s.val}</div>
                       </div>
                     ))}
                     <div style={{ gridColumn: "span 2", background: "transparent", border: "1px solid rgba(255,255,255,.18)", borderRadius: 10, padding: 18 }}>
@@ -667,7 +694,7 @@ export default function CampaignSimulator() {
           <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
             <div style={{ maxWidth: 1100, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
               <div style={{ marginBottom: 30 }}>
-                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● FOCUS-GROUP RESULTS</div>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● AI-SUGGESTED REVISIONS</div>
                 <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
                   Here's how you can improve.
                 </h2>
@@ -682,7 +709,8 @@ export default function CampaignSimulator() {
                 <>
                   {/* Two-column form mirroring the Simulate page */}
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", gap: 24, alignItems: "start" }}>
-                    {/* LEFT — flagged form */}
+                    {/* LEFT — flagged form + Before·After + CTA */}
+                    <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                     <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                         <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>
@@ -706,7 +734,7 @@ export default function CampaignSimulator() {
                           const fullWidth = k === "copy" || k === "keyMessage" || k === "targetAudience";
                           return (
                             <div key={k}
-                              onMouseEnter={() => flag && setHoverFlag(k)}
+                              onMouseEnter={() => flag && !applied && setHoverFlag(k)}
                               onMouseLeave={() => setHoverFlag(null)}
                               style={{
                                 position: "relative",
@@ -715,7 +743,7 @@ export default function CampaignSimulator() {
                               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 6 }}>
                                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                   <span style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase" }}>{meta.label}</span>
-                                  {flag && (
+                                  {flag && !applied && (
                                     <span style={{
                                       fontFamily: F.mono, fontSize: 10, fontWeight: 600, letterSpacing: ".05em",
                                       color: C.ink,
@@ -734,6 +762,16 @@ export default function CampaignSimulator() {
                                     padding: "5px 10px", borderRadius: 6, cursor: "pointer",
                                   }}>One-click fix</button>
                                 )}
+                                {applied && (
+                                  <button onClick={() => undoFix(k)} style={{
+                                    background: "transparent", color: C.muted, border: `1px solid ${C.line}`,
+                                    fontFamily: F.body, fontSize: 11, fontWeight: 600,
+                                    padding: "4px 10px", borderRadius: 6, cursor: "pointer",
+                                    display: "inline-flex", alignItems: "center", gap: 4,
+                                  }}>
+                                    <span aria-hidden style={{ fontSize: 12, lineHeight: 1 }}>↶</span> Undo
+                                  </button>
+                                )}
                               </div>
                               {meta.multiline ? (
                                 <textarea
@@ -743,7 +781,7 @@ export default function CampaignSimulator() {
                                   style={{
                                     ...inputStyle(false),
                                     background: "#fff",
-                                    borderColor: flag ? sevColor(sev) : C.line,
+                                    borderColor: applied ? C.line : flag ? sevColor(sev) : C.line,
                                   }}
                                 />
                               ) : (
@@ -753,12 +791,12 @@ export default function CampaignSimulator() {
                                   style={{
                                     ...inputStyle(false),
                                     background: "#fff",
-                                    borderColor: flag ? sevColor(sev) : C.line,
+                                    borderColor: applied ? C.line : flag ? sevColor(sev) : C.line,
                                   }}
                                 />
                               )}
 
-                              {flag && isHover && (
+                              {flag && isHover && !applied && (
                                 <div style={{
                                   position: "absolute", left: 0, right: 0, top: "calc(100% + 6px)",
                                   background: C.ink, color: C.accentInk,
@@ -778,6 +816,40 @@ export default function CampaignSimulator() {
                           );
                         })}
                       </div>
+                    </div>
+
+                    {/* Before · After comparison — flexed below flagged fields */}
+                    <div>
+                      <SectionHeader>Before · After</SectionHeader>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 12 }}>
+                        <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", background: C.surface }}>
+                          <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.lineSoft}`, fontFamily: F.mono, fontSize: 11, color: C.ink, letterSpacing: ".08em", textTransform: "uppercase", textDecoration: "underline", textDecorationColor: C.bad, textUnderlineOffset: 4 }}>Original</div>
+                          <div style={{ padding: 16 }}>
+                            <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.6, fontStyle: "italic", marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.lineSoft}` }}>{DEFAULT_PLAN.copy}</div>
+                            <Stat label="Engagement" val="1.2%" tone="bad" />
+                            <Stat label="Sentiment" val="38% positive" tone="bad" />
+                            <Stat label="Backlash Risk" val="HIGH" tone="bad" pill />
+                          </div>
+                        </div>
+                        <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", background: C.surface }}>
+                          <div style={{ padding: "10px 16px", borderBottom: `1px solid ${C.lineSoft}`, fontFamily: F.mono, fontSize: 11, color: C.ink, letterSpacing: ".08em", textTransform: "uppercase", textDecoration: "underline", textDecorationColor: C.good, textUnderlineOffset: 4 }}>Optimized</div>
+                          <div style={{ padding: 16 }}>
+                            <div style={{ fontSize: 13, color: C.ink2, lineHeight: 1.6, fontStyle: "italic", marginBottom: 14, paddingBottom: 14, borderBottom: `1px solid ${C.lineSoft}` }}>
+                              {simResult.improvedCopy || plan.copy}
+                            </div>
+                            <Stat label="Engagement" val="4.8%" tone="good" />
+                            <Stat label="Sentiment" val="76% positive" tone="good" />
+                            <Stat label="Backlash Risk" val="LOW" tone="good" pill />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                      <button onClick={() => goTo(4)} style={primaryBtnStyle()}>
+                        See your focus group →
+                      </button>
+                    </div>
                     </div>
 
                     {/* RIGHT — Audience segments (mirroring Simulate page structure) */}
@@ -802,41 +874,45 @@ export default function CampaignSimulator() {
                       )}
                     </div>
                   </div>
-
-                  {/* Comparison: before vs after */}
-                  <div style={{ marginTop: 32 }}>
-                    <SectionHeader>Before · After</SectionHeader>
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 14 }}>
-                      <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", background: C.surface }}>
-                        <div style={{ padding: "12px 18px", borderBottom: `1px solid ${C.lineSoft}`, fontFamily: F.mono, fontSize: 11, color: C.ink, letterSpacing: ".08em", textTransform: "uppercase", textDecoration: "underline", textDecorationColor: C.bad, textUnderlineOffset: 4 }}>Original</div>
-                        <div style={{ padding: 20 }}>
-                          <div style={{ fontSize: 14, color: C.ink2, lineHeight: 1.7, fontStyle: "italic", marginBottom: 18, paddingBottom: 18, borderBottom: `1px solid ${C.lineSoft}` }}>{DEFAULT_PLAN.copy}</div>
-                          <Stat label="Engagement" val="1.2%" tone="bad" />
-                          <Stat label="Sentiment" val="38% positive" tone="bad" />
-                          <Stat label="Backlash Risk" val="HIGH" tone="bad" pill />
-                        </div>
-                      </div>
-                      <div style={{ border: `1px solid ${C.line}`, borderRadius: 12, overflow: "hidden", background: C.surface }}>
-                        <div style={{ padding: "12px 18px", borderBottom: `1px solid ${C.lineSoft}`, fontFamily: F.mono, fontSize: 11, color: C.ink, letterSpacing: ".08em", textTransform: "uppercase", textDecoration: "underline", textDecorationColor: C.good, textUnderlineOffset: 4 }}>Optimized</div>
-                        <div style={{ padding: 20 }}>
-                          <div style={{ fontSize: 14, color: C.ink2, lineHeight: 1.7, fontStyle: "italic", marginBottom: 18, paddingBottom: 18, borderBottom: `1px solid ${C.lineSoft}` }}>
-                            {simResult.improvedCopy || plan.copy}
-                          </div>
-                          <Stat label="Engagement" val="4.8%" tone="good" />
-                          <Stat label="Sentiment" val="76% positive" tone="good" />
-                          <Stat label="Backlash Risk" val="LOW" tone="good" pill />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}>
-                    <button onClick={() => goTo(4)} style={primaryBtnStyle()}>
-                      See your focus group →
-                    </button>
-                  </div>
                 </>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* =====================================================
+            SCREEN 6 — ABOUT (placeholder shell for project info & credits)
+           ===================================================== */}
+        {screen === 6 && (
+          <div style={{ background: C.bg, minHeight: "calc(100vh - 56px)" }}>
+            <div style={{ maxWidth: 820, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
+              <div style={{ marginBottom: 30 }}>
+                <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".15em", marginBottom: 10 }}>● ABOUT</div>
+                <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
+                  About this project
+                </h2>
+                <p style={{ fontSize: 15, color: C.muted, maxWidth: 620, lineHeight: 1.55, margin: 0 }}>
+                  {/* TODO: short tagline / one-paragraph intro */}
+                </p>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+                {/* TODO: Project information section */}
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
+                  <SectionHeader>The project</SectionHeader>
+                  <div style={{ marginTop: 14, fontSize: 14, color: C.muted, lineHeight: 1.7 }}>
+                    {/* Add description, motivation, methodology, technologies, etc. here. */}
+                  </div>
+                </div>
+
+                {/* TODO: Credits section */}
+                <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 28 }}>
+                  <SectionHeader>Credits</SectionHeader>
+                  <div style={{ marginTop: 14, fontSize: 14, color: C.muted, lineHeight: 1.7 }}>
+                    {/* Add team members, advisors, citations, acknowledgments, etc. here. */}
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         )}
