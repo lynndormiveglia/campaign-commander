@@ -728,30 +728,51 @@ export default function CampaignSimulator() {
                   )}
                 </div>
 
-                {/* RIGHT — Audience segments + custom personas */}
+                {/* RIGHT — Overall plan check + custom personas */}
                 <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
                   <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 14, padding: 22 }}>
                     <div style={{ fontFamily: F.mono, fontSize: 11, color: C.muted, letterSpacing: ".1em", textTransform: "uppercase", marginBottom: 6 }}>
-                      Audience Segments
+                      Overall Campaign Plan Check
                     </div>
                     <p style={{ fontSize: 12, color: C.muted, lineHeight: 1.5, marginBottom: 14 }}>
                       {simResult
-                        ? "Three broad audience groups most likely to react to your campaign."
-                        : "Run a simulation to surface the audience segments most affected by your copy."}
+                        ? "AI-wide risk read across political, cultural, religious, and algorithmic factors."
+                        : "Run a simulation to generate an overall campaign-plan risk analysis."}
                     </p>
-                    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                      {(simResult?.segments ?? []).map((s, i) => (
-                        <SegmentCard key={`seg-${i}`} segment={s} />
-                      ))}
-                      {!simResult && (
-                        <div style={{
-                          border: `1px dashed ${C.line}`, borderRadius: 10, padding: 16,
-                          textAlign: "center", color: C.faint, fontSize: 12,
-                        }}>
-                          No segments yet.
+                    {simResult ? (
+                      <div style={{ display: "grid", gap: 10 }}>
+                        {([
+                          ["Political", simResult.overallCheck?.political],
+                          ["Cultural", simResult.overallCheck?.cultural],
+                          ["Religious", simResult.overallCheck?.religious],
+                          ["Algorithmic", simResult.overallCheck?.algorithmic],
+                        ] as const).map(([label, text]) => (
+                          <div key={label} style={{ background: C.bg, border: `1px solid ${C.lineSoft}`, borderRadius: 10, padding: 12 }}>
+                            <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
+                              {label}
+                            </div>
+                            <div style={{ fontSize: 12, color: C.ink2, lineHeight: 1.5 }}>
+                              {text || "No major risk signal detected."}
+                            </div>
+                          </div>
+                        ))}
+                        <div style={{ borderTop: `1px solid ${C.lineSoft}`, paddingTop: 10 }}>
+                          <div style={{ fontFamily: F.mono, fontSize: 10, color: C.muted, letterSpacing: ".08em", textTransform: "uppercase", marginBottom: 6 }}>
+                            Overall Verdict
+                          </div>
+                          <div style={{ fontSize: 13, color: C.ink, lineHeight: 1.6, fontWeight: 600 }}>
+                            {simResult.overallCheck?.overallVerdict || "No final verdict available yet."}
+                          </div>
                         </div>
-                      )}
-                    </div>
+                      </div>
+                    ) : (
+                      <div style={{
+                        border: `1px dashed ${C.line}`, borderRadius: 10, padding: 16,
+                        textAlign: "center", color: C.faint, fontSize: 12,
+                      }}>
+                        No overall analysis yet.
+                      </div>
+                    )}
                   </div>
 
                   {customPersonas.length > 0 && (

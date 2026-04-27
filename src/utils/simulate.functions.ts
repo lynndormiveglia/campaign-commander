@@ -63,6 +63,14 @@ export type SimulationInsights = {
   predictedPerformance: string;  // 1 short paragraph
 };
 
+export type SimulationOverallCheck = {
+  political: string;
+  cultural: string;
+  religious: string;
+  algorithmic: string;
+  overallVerdict: string;
+};
+
 export type SimulationResult = {
   segments: SimulationSegment[];
   personas: Persona[];
@@ -73,6 +81,7 @@ export type SimulationResult = {
   flags: FieldFlag[];
   improvedCopy: string;
   insights: SimulationInsights;
+  overallCheck: SimulationOverallCheck;
 };
 
 export type SimulationResponse =
@@ -128,7 +137,13 @@ You MUST call the return_simulation tool. Rules:
   • whatDoesnt: 2–4 bullet sentences identifying what falls flat or risks backlash.
   • opportunities: 2–3 bullet sentences with untapped angles or insights the campaign could lean into.
   • suggestedTweaks: 2–4 bullet sentences with specific, tactical changes (concrete edits, not generic advice).
-  • predictedPerformance: a single short paragraph (~3 sentences) predicting how this campaign would actually perform once it ships — engagement quality, sentiment skew, likely community response.`;
+  • predictedPerformance: a single short paragraph (~3 sentences) predicting how this campaign would actually perform once it ships — engagement quality, sentiment skew, likely community response.
+- overallCheck: an object with overall campaign-plan checks (not segmented by audience):
+  • political: political sensitivity / polarization risk check.
+  • cultural: cultural framing and cross-region interpretation check.
+  • religious: faith/cultural-belief sensitivity check.
+  • algorithmic: platform algorithm/distribution risk check.
+  • overallVerdict: single plain-English verdict with highest-priority next step.`;
 
 export const simulateCampaign = createServerFn({ method: "POST" })
   .inputValidator((data: { plan: CampaignPlan }) => {
@@ -252,8 +267,20 @@ ${data.plan.copy}`;
                       required: ["whatWorks","whatDoesnt","opportunities","suggestedTweaks","predictedPerformance"],
                       additionalProperties: false,
                     },
+                    overallCheck: {
+                      type: "object",
+                      properties: {
+                        political: { type: "string" },
+                        cultural: { type: "string" },
+                        religious: { type: "string" },
+                        algorithmic: { type: "string" },
+                        overallVerdict: { type: "string" },
+                      },
+                      required: ["political","cultural","religious","algorithmic","overallVerdict"],
+                      additionalProperties: false,
+                    },
                   },
-                  required: ["segments","personas","tones","risk","riskScore","riskRationale","flags","improvedCopy","insights"],
+                  required: ["segments","personas","tones","risk","riskScore","riskRationale","flags","improvedCopy","insights","overallCheck"],
                   additionalProperties: false,
                 },
               },
@@ -310,6 +337,14 @@ ${data.plan.copy}`;
         suggestedTweaks:      sanitizeNoCjkArray(rawInsights.suggestedTweaks, 4),
         predictedPerformance: sanitizeNoCjk(String(rawInsights.predictedPerformance ?? "")),
       };
+      const rawOverall = (parsed as { overallCheck?: Partial<SimulationOverallCheck> }).overallCheck ?? {};
+      const cleanedOverall: SimulationOverallCheck = {
+        political: sanitizeNoCjk(String(rawOverall.political ?? "")),
+        cultural: sanitizeNoCjk(String(rawOverall.cultural ?? "")),
+        religious: sanitizeNoCjk(String(rawOverall.religious ?? "")),
+        algorithmic: sanitizeNoCjk(String(rawOverall.algorithmic ?? "")),
+        overallVerdict: sanitizeNoCjk(String(rawOverall.overallVerdict ?? "")),
+      };
 
       return {
         ok: true,
@@ -328,6 +363,7 @@ ${data.plan.copy}`;
           })),
           improvedCopy: sanitizeNoCjk(String(parsed.improvedCopy ?? "")),
           insights: cleanedInsights,
+          overallCheck: cleanedOverall,
         },
       };
     } catch (e) {
