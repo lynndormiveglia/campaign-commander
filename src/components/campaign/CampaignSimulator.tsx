@@ -775,6 +775,75 @@ export default function CampaignSimulator() {
           .ciq .trustBandItem{border-right:none !important;border-top:1px solid ${C.line}}
           .ciq .trustBandItem:first-child{border-top:none}
         }
+        /* ============== MOBILE COMPACT OVERRIDES ============== */
+        @media (max-width: 760px){
+          /* Top nav: tighter padding, allow horizontal scroll for steps */
+          .ciq nav{padding:0 14px !important; height:52px !important; gap:10px}
+          .ciq nav > div:first-child{font-size:15px !important; gap:8px !important; flex-shrink:0}
+          .ciq nav > div:last-child{
+            display:flex !important; gap:2px !important;
+            overflow-x:auto; -webkit-overflow-scrolling:touch;
+            scrollbar-width:none; min-width:0;
+          }
+          .ciq nav > div:last-child::-webkit-scrollbar{display:none}
+          .ciq nav button{padding:5px 10px !important; font-size:12px !important; flex-shrink:0}
+          .ciq > div > div[style*="padding-top: 56px"]{padding-top:52px !important}
+
+          /* Loosen forced viewport heights so content can breathe */
+          .ciq [style*="height: calc(100vh - 56px)"]{
+            height:auto !important; min-height:calc(100vh - 52px) !important;
+          }
+
+          /* Reduce big section paddings */
+          .ciq [style*="padding: 56px 28px"]{padding:32px 16px !important}
+          .ciq [style*="padding: 52px 24px"]{padding:32px 16px !important}
+          .ciq [style*="padding: 48px 28px"]{padding:28px 16px !important}
+          .ciq [style*="padding: 40px 28px"]{padding:24px 16px !important}
+          .ciq [style*="padding: 36px 28px"]{padding:24px 16px !important}
+          .ciq [style*="padding: 32px 28px"]{padding:20px 16px !important}
+          .ciq [style*="padding: 28px 28px"]{padding:20px 16px !important}
+          .ciq [style*="padding: 24px 28px"]{padding:18px 16px !important}
+          .ciq [style*="padding: 20px 28px"]{padding:16px 14px !important}
+          .ciq [style*="padding: 22px"]{padding:16px !important}
+          .ciq [style*="padding: 28px"]{padding:18px !important}
+          .ciq [style*="padding: 32px"]{padding:20px !important}
+          .ciq [style*="padding: 36px"]{padding:22px !important}
+
+          /* Cap large display headings */
+          .ciq h1{font-size:clamp(26px,8vw,38px) !important; line-height:1.1 !important}
+          .ciq h2{font-size:clamp(22px,6.5vw,30px) !important; line-height:1.15 !important}
+          .ciq h3{font-size:clamp(16px,4.5vw,20px) !important}
+
+          /* Collapse two/three-column inline grids */
+          .ciq [style*="grid-template-columns: 1fr 1fr"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns: 1fr 1fr 1fr"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns:1fr 1fr 1fr"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns: repeat(3"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns: repeat(4"]{grid-template-columns:1fr 1fr !important}
+
+          /* Allow flex rows to wrap and shrink */
+          .ciq [style*="display: flex"][style*="justify-content: space-between"]{flex-wrap:wrap; gap:10px}
+
+          /* Inputs/textareas/buttons: full width, smaller paddings */
+          .ciq input, .ciq textarea, .ciq select{max-width:100% !important; box-sizing:border-box}
+          .ciq button[style*="padding: 16px 40px"]{padding:14px 24px !important; font-size:15px !important}
+          .ciq button[style*="padding: 14px 32px"]{padding:12px 20px !important}
+
+          /* Prevent any wide max-widths from blowing out */
+          .ciq [style*="max-width: 1100px"],
+          .ciq [style*="max-width: 980px"],
+          .ciq [style*="max-width: 860px"],
+          .ciq [style*="max-width: 720px"],
+          .ciq [style*="max-width: 620px"]{max-width:100% !important}
+
+          /* Generic overflow guard */
+          .ciq img, .ciq video{max-width:100%; height:auto}
+        }
+        @media (max-width: 480px){
+          .ciq nav button{padding:5px 8px !important; font-size:11px !important}
+          .ciq nav > div:first-child span:last-child{display:none}
+        }
       `}</style>
 
       <div className="ciq">
