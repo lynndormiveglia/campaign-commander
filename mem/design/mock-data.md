@@ -1,5 +1,5 @@
 ---
-name: CampaignIQ mock data
+name: Premortem mock data
 description: Locked numbers, comments, and segments — do not change without agreement
 type: feature
 ---

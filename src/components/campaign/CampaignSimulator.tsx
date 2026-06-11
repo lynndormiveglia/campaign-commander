@@ -788,7 +788,7 @@ export default function CampaignSimulator() {
         }}>
           <div style={{ fontFamily: F.display, fontSize: 17, fontWeight: 700, display: "flex", alignItems: "center", gap: 10, letterSpacing: "-0.01em" }}>
             <span style={{ width: 18, height: 18, background: C.ink, borderRadius: 4, display: "inline-block" }} />
-            CampaignIQ
+            Premortem
             <span style={{ fontFamily: F.mono, background: C.lineSoft, color: C.muted, padding: "2px 7px", borderRadius: 4, fontSize: 10, letterSpacing: ".05em" }}>DEMO</span>
           </div>
           <div style={{ display: "flex", gap: 2 }}>
@@ -1549,7 +1549,7 @@ export default function CampaignSimulator() {
                     </span>
                   </div>
                   <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.65, margin: 0 }}>
-                    Traditional focus groups are essential for understanding whether a message resonates - but they're expensive, slow, and difficult to organize. Teams are forced to choose between costly research and fast decision-making. CampaignIQ removes that tradeoff with instant audience simulation, so teams can validate, refine, and launch with confidence.
+                    Traditional focus groups are essential for understanding whether a message resonates - but they're expensive, slow, and difficult to organize. Teams are forced to choose between costly research and fast decision-making. Premortem removes that tradeoff with instant audience simulation, so teams can validate, refine, and launch with confidence.
                   </p>
                 </div>
 
@@ -1667,13 +1667,13 @@ export default function CampaignSimulator() {
             <div style={{ maxWidth: 1080, margin: "0 auto", padding: "56px 28px" }} className="fadeIn">
               <div style={{ marginBottom: 26 }}>
                 <div style={{ fontFamily: F.mono, fontSize: 11, color: "#2563EB", letterSpacing: ".15em", marginBottom: 10, textTransform: "uppercase" }}>
-                  HOW CAMPAIGNIQ WORKS
+                  HOW PREMORTEM WORKS
                 </div>
                 <h2 style={{ fontFamily: F.display, fontSize: 38, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 10 }}>
                   From campaign brief to synthetic audience insight
                 </h2>
                 <p style={{ fontSize: 15, color: C.muted, maxWidth: 620, lineHeight: 1.55, margin: 0 }}>
-                  CampaignIQ combines structured audience inputs with staged language-model generation to simulate likely audience reactions before launch.
+                  Premortem combines structured audience inputs with staged language-model generation to simulate likely audience reactions before launch.
                 </p>
               </div>
 
@@ -1799,7 +1799,7 @@ export default function CampaignSimulator() {
                     </span>
                   </div>
                   <p style={{ fontSize: 14, color: C.muted, lineHeight: 1.65, margin: 0 }}>
-                    Traditional focus groups are essential for understanding whether a message resonates - but they're expensive, slow, and difficult to organize. Teams are forced to choose between costly research and fast decision-making. CampaignIQ removes that tradeoff with instant audience simulation, so teams can validate, refine, and launch with confidence.
+                    Traditional focus groups are essential for understanding whether a message resonates - but they're expensive, slow, and difficult to organize. Teams are forced to choose between costly research and fast decision-making. Premortem removes that tradeoff with instant audience simulation, so teams can validate, refine, and launch with confidence.
                   </p>
                 </div>
 
