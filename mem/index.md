@@ -1,7 +1,7 @@
 # Project Memory
 
 ## Core
-CampaignIQ — 4-screen pitch demo. Narrative: Launch → Crisis → Simulate → Results. All data mocked.
+Premortem — 4-screen pitch demo. Narrative: Launch → Crisis → Simulate → Results. All data mocked.
 Fonts: Space Grotesk (display 600/700), Poppins (body 300–700), JetBrains Mono (notifications/labels).
 ElevenLabs-inspired monochrome palette: off-white #FAFAF9 canvas, near-black #0A0A0A type/CTAs, neutrals only. No colored brand accents — risk states use red/amber/green only when semantic.
 1px hairline borders > shadows. Radii 8–14px. Subtle staggered reveals.

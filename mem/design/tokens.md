@@ -1,5 +1,5 @@
 ---
-name: CampaignIQ design tokens
+name: Premortem design tokens
 description: Color palette, typography, border/radius/animation rules from the brief
 type: design
 ---
