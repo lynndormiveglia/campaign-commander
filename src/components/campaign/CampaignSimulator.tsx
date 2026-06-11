@@ -821,6 +821,10 @@ export default function CampaignSimulator() {
           .ciq [style*="grid-template-columns:1fr 1fr 1fr"]{grid-template-columns:1fr !important}
           .ciq [style*="grid-template-columns: repeat(3"]{grid-template-columns:1fr !important}
           .ciq [style*="grid-template-columns: repeat(4"]{grid-template-columns:1fr 1fr !important}
+          .ciq [style*="grid-template-columns: 1fr 380px"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns: 1fr 360px"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns: 1fr 320px"]{grid-template-columns:1fr !important}
+          .ciq [style*="grid-template-columns: 1fr 300px"]{grid-template-columns:1fr !important}
 
           /* Allow flex rows to wrap and shrink */
           .ciq [style*="display: flex"][style*="justify-content: space-between"]{flex-wrap:wrap; gap:10px}
